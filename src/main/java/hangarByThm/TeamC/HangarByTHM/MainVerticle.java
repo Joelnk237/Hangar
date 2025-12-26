@@ -8,6 +8,12 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
+import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.sqlclient.Pool;
+import io.vertx.sqlclient.SqlClient;
+import io.vertx.sqlclient.PoolOptions;
+import io.vertx.pgclient.PgBuilder;
+import org.flywaydb.core.Flyway;
 
 
 public class MainVerticle extends VerticleBase {
@@ -18,10 +24,68 @@ public class MainVerticle extends VerticleBase {
   }
 
 
+
+  public static class DatabaseClient {
+
+    private static SqlClient client;
+
+    public static SqlClient getClient(Vertx vertx) {
+
+      if (client == null) {
+
+        PgConnectOptions connectOptions = new PgConnectOptions()
+          .setHost("localhost")
+          .setPort(5432)
+          .setDatabase("hangar_db")
+          .setUser("root")
+          .setPassword("root");
+
+        PoolOptions poolOptions = new PoolOptions()
+          .setMaxSize(10);
+
+        // Create the client pool
+        client = PgBuilder
+          .client()
+          .with(poolOptions)
+          .connectingTo(connectOptions)
+          .using(vertx)
+          .build();
+      }
+
+      return client;
+    }
+  }
+
+
+
+  public static class FlywayConfig {
+
+    public static void migrate() {       // mvn flyway:migrate bei jeder Migration
+
+      Flyway flyway = Flyway.configure()
+        .dataSource(
+          "jdbc:postgresql://localhost:5432/hangar_db", // System.getenv("DB_URL")
+          "root",      //System.getenv("DB_USER")
+          "root"      // System.getenv("DB_PASSWORD")
+        )
+        .locations("classpath:db/migrations")
+        .baselineOnMigrate(true)
+        .load();
+
+      flyway.migrate();
+    }
+  }
+
+
   @Override
   public Future<?> start() {
 
     Router router = Router.router(vertx);
+    //FlywayConfig.migrate();  // Migrationen updaten (aus der DB)
+
+    SqlClient pool =  DatabaseClient.getClient(vertx); // Pool für SQL-Abfragen
+
+
 
     // CORS_konfigurationen: unabhängig von dem Server wo die GET-Anfragen gestartet wurden
     router.route().handler(CorsHandler.create()
@@ -38,6 +102,18 @@ public class MainVerticle extends VerticleBase {
     // Alle Routen (GET, POST, GET,...) definieren
     router.get("/")
       .handler(this::home);
+
+    pool
+      .query("SELECT 1")
+      .execute()
+      .onSuccess(res -> {
+        System.out.println("✅ Connexion PostgreSQL OK !");
+      })
+      .onFailure(err -> {
+        System.err.println("❌ Error connexion PostgreSQL");
+      });
+
+    System.out.println(System.getenv("DB_PASSWORD"));
 
 
 

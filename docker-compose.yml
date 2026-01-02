@@ -25,5 +25,17 @@ services:
     ports:
       - "5050:80"
 
+  flyway:
+    image: flyway/flyway:10
+    depends_on:
+      - postgres
+    command: >
+      migrate
+      -url=jdbc:postgresql://postgres:5432/hangar_db
+      -user=root
+      -password=root
+    volumes:
+      - ./src/main/resources/db/migrations:/flyway/sql
+
 volumes:
   pgdata:

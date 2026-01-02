@@ -58,25 +58,6 @@ public class MainVerticle extends VerticleBase {
 
 
 
-  public static class FlywayConfig {
-
-    public static void migrate() {       // mvn flyway:migrate bei jeder Migration
-
-      Flyway flyway = Flyway.configure()
-        .dataSource(
-          "jdbc:postgresql://localhost:5432/hangar_db", // System.getenv("DB_URL")
-          "root",      //System.getenv("DB_USER")
-          "root"      // System.getenv("DB_PASSWORD")
-        )
-        .locations("classpath:db/migrations")
-        .baselineOnMigrate(true)
-        .load();
-
-      flyway.migrate();
-    }
-  }
-
-
   @Override
   public Future<?> start() {
 
@@ -113,7 +94,7 @@ public class MainVerticle extends VerticleBase {
         System.err.println("❌ Error connexion PostgreSQL");
       });
 
-    System.out.println(System.getenv("DB_PASSWORD"));
+    //System.out.println(System.getenv("DB_PASSWORD"));
 
 
 

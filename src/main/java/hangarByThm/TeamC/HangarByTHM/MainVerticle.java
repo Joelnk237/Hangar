@@ -4,6 +4,8 @@ import io.vertx.core.Future;
 import io.vertx.core.VerticleBase;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
@@ -13,7 +15,13 @@ import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.pgclient.PgBuilder;
+import io.vertx.sqlclient.Tuple;
 import org.flywaydb.core.Flyway;
+
+import java.util.List;
+import java.util.UUID;
+
+import static hangarByThm.TeamC.HangarByTHM.MainVerticle.DatabaseClient.client;
 
 
 public class MainVerticle extends VerticleBase {
@@ -27,7 +35,7 @@ public class MainVerticle extends VerticleBase {
 
   public static class DatabaseClient {
 
-    private static SqlClient client;
+    protected static SqlClient client;
 
     public static SqlClient getClient(Vertx vertx) {
 
@@ -84,6 +92,9 @@ public class MainVerticle extends VerticleBase {
     router.get("/")
       .handler(this::home);
 
+    router.post("/api/auth/register").handler(this::registerHandler);
+
+
     pool
       .query("SELECT 1")
       .execute()
@@ -111,4 +122,128 @@ public class MainVerticle extends VerticleBase {
       putHeader("Content-Type", "text/html").
       end("Welcome to HangarByTHM");
   }
+
+  private void registerHandler(RoutingContext ctx) {
+    JsonObject body = ctx.body().asJsonObject(); // Vert.x 5
+
+    String rolle = body.getString("rolle", "hangaranbieter");
+
+    insertBenutzer(body)
+      .compose(benutzerId -> {
+        if ("flugzeugbesitzer".equals(rolle)) {
+          return insertFlugzeugbesitzer(benutzerId, body).mapEmpty();
+        } else {
+          return insertHangaranbieter(benutzerId, body)
+            .compose(hangarId -> {
+              // Flugzeugtypen
+
+              JsonObject fts =
+                body.getJsonObject("flugzeugtypUndStellplaetze", new JsonObject());
+
+              JsonArray aircraftTypes =
+                fts.getJsonArray("aircraftTypes", new JsonArray());
+
+              Future<Void> typesFuture = insertSequentially(
+                aircraftTypes,
+                t -> insertFlugzeugtyp(hangarId, t.toString())
+              );
+
+
+              Future<Void> sizesFuture = insertSequentially(
+                body.getJsonArray("flugzeuggroessen", new JsonArray()),
+                g -> insertFlugzeuggroesse(hangarId, g.toString())
+              );
+
+              return typesFuture.compose(v -> sizesFuture);
+            });
+        }
+      })
+      .onSuccess(v -> ctx.response()
+        .setStatusCode(201)
+        .putHeader("Content-Type", "application/json")
+        .end(new JsonObject().put("message", "Registration successful").encode()))
+      .onFailure(err -> ctx.response()
+        .setStatusCode(500)
+        .putHeader("Content-Type", "application/json")
+        .end(new JsonObject().put("error", err.getMessage()).encode()));
+  }
+
+
+  // -------------------- SQL INSERTIONS --------------------
+
+  private Future<UUID> insertBenutzer(JsonObject body) {
+    String sql = "INSERT INTO benutzer(name,email,passwort_hash,rolle) VALUES ($1,$2,$3,$4) RETURNING id";
+    return client.preparedQuery(sql)
+      .execute(Tuple.of(
+        body.getString("name"),
+        body.getString("email"),
+        body.getString("password"), // attention : tu peux hasher ici
+        body.getString("rolle")
+      ))
+      .map(rowSet -> rowSet.iterator().next().getUUID("id"));
+  }
+
+  private Future<Void> insertFlugzeugbesitzer(UUID benutzerId, JsonObject body) {
+    String sql = "INSERT INTO flugzeugbesitzer(benutzer_id,telefon) VALUES ($1,$2)";
+    return client.preparedQuery(sql)
+      .execute(Tuple.of(
+        benutzerId,
+        body.getString("tel")
+      ))
+      .mapEmpty();
+  }
+
+  private Future<UUID> insertHangaranbieter(UUID benutzerId, JsonObject body) {
+    String sql = """
+      INSERT INTO hangaranbieter(
+        benutzer_id, firmenname, ansprechpartner, telefon, hangar_merkmale, services, flugzeugtyp_und_stellplaetze
+      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb) RETURNING id
+    """;
+
+    return client.preparedQuery(sql)
+      .execute(Tuple.of(
+        benutzerId,
+        body.getString("firmenname"),
+        body.getString("ansPartner"),
+        body.getString("tel"),
+        body.getJsonObject("hangarMerkmale").encode(),
+        body.getJsonObject("services").encode(),
+        body.getJsonObject("flugzeugtypUndStellplaetze").encode()
+      ))
+      .map(rowSet -> rowSet.iterator().next().getUUID("id"));
+  }
+
+  private Future<Void> insertFlugzeugtyp(UUID hangarId, String typ) {
+    String sql = "INSERT INTO hangaranbieter_flugzeugtypen(hangaranbieter_id, flugzeugtyp) VALUES ($1,$2::flugzeugtyp_enum)";
+    return client.preparedQuery(sql)
+      .execute(Tuple.of(hangarId, typ))
+      .mapEmpty();
+  }
+
+  private Future<Void> insertFlugzeuggroesse(UUID hangarId, String groesse) {
+    String sql = "INSERT INTO hangaranbieter_flugzeuggroessen(hangaranbieter_id, flugzeuggroesse) VALUES ($1,$2::flugzeuggroesse_enum)";
+    return client.preparedQuery(sql)
+      .execute(Tuple.of(hangarId, groesse))
+      .mapEmpty();
+  }
+
+  private <T> Future<Void> insertSequentially(
+    Iterable<T> items,
+    java.util.function.Function<T, Future<Void>> inserter
+  ) {
+    Future<Void> future = Future.succeededFuture();
+
+    for (T item : items) {
+      final T current = item; // <-- FINAL
+      future = future.compose(v -> inserter.apply(current));
+    }
+
+    return future;
+  }
+
+
+
+
+
+
 }

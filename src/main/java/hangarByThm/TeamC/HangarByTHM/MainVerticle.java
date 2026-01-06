@@ -6,17 +6,21 @@ import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.auth.JWTOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.pgclient.PgConnectOptions;
-import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.sqlclient.Tuple;
-import org.flywaydb.core.Flyway;
+import io.vertx.ext.auth.jwt.JWTAuth;
+import io.vertx.ext.auth.jwt.JWTAuthOptions;
+import io.vertx.ext.auth.PubSecKeyOptions;
+
+
 
 import java.util.List;
 import java.util.UUID;
@@ -25,6 +29,7 @@ import static hangarByThm.TeamC.HangarByTHM.MainVerticle.DatabaseClient.client;
 
 
 public class MainVerticle extends VerticleBase {
+  private JWTAuth jwtAuth;
 
   // The following snippet is only necessary if you want to start the server directly using IntelliJ
   public static void main(String[] args) {
@@ -69,8 +74,14 @@ public class MainVerticle extends VerticleBase {
   @Override
   public Future<?> start() {
 
+    jwtAuth = JWTAuth.create(vertx, new JWTAuthOptions()
+      .addPubSecKey(new PubSecKeyOptions()
+        .setAlgorithm("HS256")
+        .setBuffer("super-secret-key-change-me"))
+    );
+
     Router router = Router.router(vertx);
-    //FlywayConfig.migrate();  // Migrationen updaten (aus der DB)
+
 
     SqlClient pool =  DatabaseClient.getClient(vertx); // Pool für SQL-Abfragen
 
@@ -96,6 +107,7 @@ public class MainVerticle extends VerticleBase {
       .handler(this::home);
 
     router.post("/api/auth/register").handler(this::registerHandler);
+    router.post("/api/auth/login").handler(this::loginHandler);
 
 
     pool
@@ -125,6 +137,70 @@ public class MainVerticle extends VerticleBase {
       putHeader("Content-Type", "text/html").
       end("Welcome to HangarByTHM");
   }
+  private void loginHandler(RoutingContext ctx) {
+
+    JsonObject body = ctx.body().asJsonObject();
+
+    String email = body.getString("email");
+    String password = body.getString("password");
+
+    if (email == null || password == null) {
+      ctx.response().setStatusCode(400).end("Missing credentials");
+      return;
+    }
+
+    String sql = """
+    SELECT id, email, passwort_hash, rolle
+    FROM benutzer
+    WHERE email = $1
+  """;
+
+    client
+      .preparedQuery(sql)
+      .execute(Tuple.of(email))
+      .onFailure(err -> ctx.fail(500, err))
+      .onSuccess(rows -> {
+
+        if (!rows.iterator().hasNext()) {
+          ctx.response().setStatusCode(401).end("Invalid credentials");
+          return;
+        }
+
+        var row = rows.iterator().next();
+
+        String storedPassword = row.getString("passwort_hash");
+
+        // ⚠️ À améliorer plus tard avec BCrypt
+        if (!storedPassword.equals(password)) {
+          ctx.response().setStatusCode(401).end("Invalid credentials");
+          return;
+        }
+
+        System.out.println("LOGIN erfolgreich");
+        UUID userId = row.getUUID("id");
+        String rolle = row.getString("rolle");
+
+        String token = jwtAuth.generateToken(
+          new JsonObject()
+            .put("sub", userId.toString())
+            .put("email", email)
+            .put("rolle", rolle),
+          new JWTOptions()
+            .setExpiresInMinutes(60)
+        );
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("token", token)
+            .put("user", new JsonObject()
+              .put("id", userId)
+              .put("email", email)
+              .put("rolle", rolle))
+            .encode());
+      });
+  }
+
 
   private void registerHandler(RoutingContext ctx) {
     JsonObject body = ctx.body().asJsonObject(); // Vert.x 5
@@ -211,7 +287,7 @@ public class MainVerticle extends VerticleBase {
     return client.preparedQuery(sql)
       .execute(Tuple.of(
         benutzerId,
-        body.getString("firmenname"),
+        body.getString("name"),
         body.getString("ansPartner"),
         body.getString("tel"),
         body.getJsonObject("hangarMerkmale").encode(),

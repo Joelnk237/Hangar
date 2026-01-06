@@ -82,7 +82,10 @@ public class MainVerticle extends VerticleBase {
       .allowedMethod(HttpMethod.GET)
       .allowedMethod(HttpMethod.DELETE)
       .allowedMethod(HttpMethod.PUT)
-      .allowedMethod(HttpMethod.POST));
+      .allowedMethod(HttpMethod.POST)
+      .allowedMethod(HttpMethod.OPTIONS)
+      .allowedHeader("Content-Type")
+      .allowedHeader("Authorization"));
 
     // Konfiguration für Anfrage mit Body
     router.route().handler(BodyHandler.create());
@@ -172,13 +175,18 @@ public class MainVerticle extends VerticleBase {
   // -------------------- SQL INSERTIONS --------------------
 
   private Future<UUID> insertBenutzer(JsonObject body) {
-    String sql = "INSERT INTO benutzer(name,email,passwort_hash,rolle) VALUES ($1,$2,$3,$4) RETURNING id";
+    JsonObject adresse = body.getJsonObject("adresse", new JsonObject());
+    String sql = "INSERT INTO benutzer(name,email,passwort_hash,rolle,strasse,hausnummer,plz,ort) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id";
     return client.preparedQuery(sql)
       .execute(Tuple.of(
         body.getString("name"),
         body.getString("email"),
-        body.getString("password"), // attention : tu peux hasher ici
-        body.getString("rolle")
+        body.getString("password"), // Achtung: Man kann hier den hashwert berechnen
+        body.getString("rolle"),
+        adresse.getString("strasse"),
+        adresse.getString("hausnummer"),
+        adresse.getString("plz"),
+        adresse.getString("ort")
       ))
       .map(rowSet -> rowSet.iterator().next().getUUID("id"));
   }

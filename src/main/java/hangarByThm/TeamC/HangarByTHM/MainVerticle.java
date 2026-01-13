@@ -28,6 +28,7 @@ import java.util.UUID;
 import static hangarByThm.TeamC.HangarByTHM.MainVerticle.DatabaseClient.client;
 
 
+
 public class MainVerticle extends VerticleBase {
   private JWTAuth jwtAuth;
 
@@ -119,13 +120,6 @@ public class MainVerticle extends VerticleBase {
       .onFailure(err -> {
         System.err.println("❌ Error connexion PostgreSQL");
       });
-
-    //System.out.println(System.getenv("DB_PASSWORD"));
-
-
-
-
-
     return vertx.createHttpServer().requestHandler(router)
       .listen(8888).onSuccess(http -> {
       System.out.println("HTTP server started on port 8888");
@@ -203,49 +197,86 @@ public class MainVerticle extends VerticleBase {
 
 
   private void registerHandler(RoutingContext ctx) {
-    JsonObject body = ctx.body().asJsonObject(); // Vert.x 5
-
-    String rolle = body.getString("rolle", "hangaranbieter");
-
+    JsonObject body = ctx.body().asJsonObject();
+    String rolle = body.getString("rolle");
+    if (rolle == null) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("Rolle fehlt (hangaranbieter | flugzeugbesitzer)");
+      return;
+    }
     insertBenutzer(body)
       .compose(benutzerId -> {
-        if ("flugzeugbesitzer".equals(rolle)) {
-          return insertFlugzeugbesitzer(benutzerId, body).mapEmpty();
-        } else {
-          return insertHangaranbieter(benutzerId, body)
-            .compose(hangarId -> {
-              // Flugzeugtypen
 
-              JsonObject fts =
-                body.getJsonObject("flugzeugtypUndStellplaetze", new JsonObject());
-
-              JsonArray aircraftTypes =
-                fts.getJsonArray("aircraftTypes", new JsonArray());
-
-              Future<Void> typesFuture = insertSequentially(
-                aircraftTypes,
-                t -> insertFlugzeugtyp(hangarId, t.toString())
-              );
-
-
-              Future<Void> sizesFuture = insertSequentially(
-                body.getJsonArray("flugzeuggroessen", new JsonArray()),
-                g -> insertFlugzeuggroesse(hangarId, g.toString())
-              );
-
-              return typesFuture.compose(v -> sizesFuture);
-            });
+        /* ===================== FLUGZEUGBESITZER ===================== */
+        if ("flugzeugbesitzer".equalsIgnoreCase(rolle)) {
+          return insertFlugzeugbesitzer(benutzerId, body);
         }
+
+        /* ===================== HANGARANBIETER ===================== */
+        return insertHangaranbieter(benutzerId, body)
+          .compose(hangarId -> {
+
+            /* ================= SERVICES ================= */
+            JsonObject services =
+              body.getJsonObject("services", new JsonObject());
+
+            Future<Void> servicesFuture =
+              insertServices(hangarId, services);
+
+            // -------- Flugzeugtypen --------
+            JsonArray flugzeugtypen =
+              body.getJsonArray("flugzeugtypen", new JsonArray());
+
+            Future<Void> typFuture = insertSequentially(
+              flugzeugtypen,
+              obj -> {
+                JsonObject o = (JsonObject) obj;
+                return insertFlugzeugtyp(
+                  hangarId,
+                  o.getString("typ"),
+                  o.getInteger("stellplaetze")
+                );
+              }
+            );
+
+            // -------- Flugzeuggrößen --------
+            JsonArray flugzeuggroessen =
+              body.getJsonArray("flugzeuggroessen", new JsonArray());
+
+            Future<Void> groesseFuture = insertSequentially(
+              flugzeuggroessen,
+              obj -> {
+                JsonObject o = (JsonObject) obj;
+                return insertFlugzeuggroesse(
+                  hangarId,
+                  o.getString("groesse"),
+                  o.getInteger("stellplaetze")
+                );
+              }
+            );
+
+            return servicesFuture
+              .compose(v -> typFuture)
+              .compose(v -> groesseFuture);
+          });
       })
-      .onSuccess(v -> ctx.response()
-        .setStatusCode(201)
-        .putHeader("Content-Type", "application/json")
-        .end(new JsonObject().put("message", "Registration successful").encode()))
-      .onFailure(err -> ctx.response()
-        .setStatusCode(500)
-        .putHeader("Content-Type", "application/json")
-        .end(new JsonObject().put("error", err.getMessage()).encode()));
+      .onSuccess(v ->
+        ctx.response()
+          .setStatusCode(201)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Registration erfolgreich")
+            .encode())
+      )
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end(err.getMessage());
+      });
   }
+
 
 
   // -------------------- SQL INSERTIONS --------------------
@@ -280,8 +311,8 @@ public class MainVerticle extends VerticleBase {
   private Future<UUID> insertHangaranbieter(UUID benutzerId, JsonObject body) {
     String sql = """
       INSERT INTO hangaranbieter(
-        benutzer_id, firmenname, ansprechpartner, telefon, hangar_merkmale, services, flugzeugtyp_und_stellplaetze
-      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb) RETURNING id
+        benutzer_id, firmenname, ansprechpartner, telefon, hangar_merkmale
+      ) VALUES ($1,$2,$3,$4,$5::jsonb) RETURNING id
     """;
 
     return client.preparedQuery(sql)
@@ -290,26 +321,88 @@ public class MainVerticle extends VerticleBase {
         body.getString("name"),
         body.getString("ansPartner"),
         body.getString("tel"),
-        body.getJsonObject("hangarMerkmale").encode(),
-        body.getJsonObject("services").encode(),
-        body.getJsonObject("flugzeugtypUndStellplaetze").encode()
+        body.getJsonObject("hangarMerkmale").encode()
       ))
       .map(rowSet -> rowSet.iterator().next().getUUID("id"));
   }
 
-  private Future<Void> insertFlugzeugtyp(UUID hangarId, String typ) {
-    String sql = "INSERT INTO hangaranbieter_flugzeugtypen(hangaranbieter_id, flugzeugtyp) VALUES ($1,$2::flugzeugtyp_enum)";
+  private Future<Void> insertFlugzeugtyp(
+    UUID hangarId,
+    String typ,
+    Integer stellplaetze
+  ) {
+    String sql = """
+    INSERT INTO hangaranbieter_flugzeugtypen
+    (hangaranbieter_id, flugzeugtyp, freie_stellplatz_anzahl)
+    VALUES ($1, $2::flugzeugtyp_enum, $3)
+  """;
+
     return client.preparedQuery(sql)
-      .execute(Tuple.of(hangarId, typ))
+      .execute(Tuple.of(hangarId, typ, stellplaetze))
       .mapEmpty();
   }
 
-  private Future<Void> insertFlugzeuggroesse(UUID hangarId, String groesse) {
-    String sql = "INSERT INTO hangaranbieter_flugzeuggroessen(hangaranbieter_id, flugzeuggroesse) VALUES ($1,$2::flugzeuggroesse_enum)";
+
+  private Future<Void> insertFlugzeuggroesse(
+    UUID hangarId,
+    String groesse,
+    Integer stellplaetze
+  ) {
+    String sql = """
+    INSERT INTO hangaranbieter_flugzeuggroessen
+    (hangaranbieter_id, flugzeuggroesse, freie_stellplatz_anzahl)
+    VALUES ($1, $2::flugzeuggroesse_enum, $3)
+  """;
+
     return client.preparedQuery(sql)
-      .execute(Tuple.of(hangarId, groesse))
+      .execute(Tuple.of(hangarId, groesse, stellplaetze))
       .mapEmpty();
   }
+
+  private Future<Void> insertServices(UUID hangarId, JsonObject services) {
+
+    return insertSequentially(services.fieldNames(), key -> {
+      JsonObject s = services.getJsonObject(key);
+
+      // Si le service n'est pas aktiviert, on ignore
+      if (!s.getBoolean("enabled", false)) {
+        return Future.succeededFuture();
+      }
+      Integer preis = Integer.parseInt(s.getString("price"));
+      String einheit = s.getString("unit");
+
+      // Nom du service tel qu'il est dans la DB (ENUM)
+      String serviceName = key; // "einlagerung" -> "Einlagerung"
+
+      // On récupère d'abord l'ID du service existant
+      String sqlGetServiceId = "SELECT id FROM service WHERE bezeichnung = $1::servicename_enum";
+
+      return client.preparedQuery(sqlGetServiceId)
+        .execute(Tuple.of(serviceName))
+        .compose(rows -> {
+          if (!rows.iterator().hasNext()) {
+            return Future.failedFuture(
+              new RuntimeException("Service " + serviceName + " not found in database")
+            );
+          }
+          Integer serviceId = rows.iterator().next().getInteger("id");
+
+          // Insérer dans angebotene_services
+          String sqlInsertAngebot = """
+                    INSERT INTO angebotene_services (hangaranbieter_id, service_id, preis, einheit)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT DO NOTHING
+                """;
+
+          return client.preparedQuery(sqlInsertAngebot)
+            .execute(Tuple.of(hangarId, serviceId, preis, einheit))
+            .mapEmpty();
+        });
+    });
+  }
+
+
+
 
   private <T> Future<Void> insertSequentially(
     Iterable<T> items,

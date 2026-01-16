@@ -11,6 +11,7 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
+import io.vertx.ext.web.handler.JWTAuthHandler;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.PoolOptions;
@@ -80,6 +81,9 @@ public class MainVerticle extends VerticleBase {
         .setAlgorithm("HS256")
         .setBuffer("super-secret-key-change-me"))
     );
+    JWTAuthHandler jwtAuthHandler = JWTAuthHandler.create(jwtAuth);
+
+
 
     Router router = Router.router(vertx);
 
@@ -104,11 +108,14 @@ public class MainVerticle extends VerticleBase {
 
 
     // Alle Routen (GET, POST, GET,...) definieren
-    router.get("/")
-      .handler(this::home);
+    /*router.get("/")
+      .handler(this::home);*/
 
     router.post("/api/auth/register").handler(this::registerHandler);
     router.post("/api/auth/login").handler(this::loginHandler);
+    router.get("/api/users/me")
+      .handler(jwtAuthHandler)   // 🔥 JWT Handling
+      .handler(this::getHomePage);
 
 
     pool
@@ -126,10 +133,23 @@ public class MainVerticle extends VerticleBase {
     });
   }
 
-  private void home(RoutingContext ctx) {
-    ctx.response().setStatusCode(200).
-      putHeader("Content-Type", "text/html").
-      end("Welcome to HangarByTHM");
+  private void getHomePage(RoutingContext ctx) {
+    JsonObject principal = ctx.user().principal();
+
+    //  id und rôle
+    String userId = principal.getString("sub");
+    String rolle = principal.getString("rolle");
+    String email = principal.getString("email");
+
+    JsonObject userJson = new JsonObject()
+      .put("id", userId)
+      .put("email", email)
+      .put("rolle", rolle);
+
+    ctx.response()
+      .putHeader("Content-Type", "application/json")
+      .setStatusCode(200)
+      .end(userJson.encode());
   }
   private void loginHandler(RoutingContext ctx) {
 

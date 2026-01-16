@@ -7,11 +7,13 @@ import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.auth.JWTOptions;
+import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.JWTAuthHandler;
+import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.PoolOptions;
@@ -22,7 +24,8 @@ import io.vertx.ext.auth.jwt.JWTAuthOptions;
 import io.vertx.ext.auth.PubSecKeyOptions;
 
 
-
+import java.io.IOException;
+import java.nio.file.*;
 import java.util.List;
 import java.util.UUID;
 
@@ -104,7 +107,16 @@ public class MainVerticle extends VerticleBase {
       .allowedHeader("Authorization"));
 
     // Konfiguration für Anfrage mit Body
-    router.route().handler(BodyHandler.create());
+    router.route().handler(
+      BodyHandler.create()
+        .setUploadsDirectory("uploads")
+        .setMergeFormAttributes(true)
+        .setDeleteUploadedFilesOnEnd(false)
+    );
+
+
+    router.route("/uploads/*").handler(StaticHandler.create("uploads"));
+
 
 
     // Alle Routen (GET, POST, GET,...) definieren
@@ -113,9 +125,23 @@ public class MainVerticle extends VerticleBase {
 
     router.post("/api/auth/register").handler(this::registerHandler);
     router.post("/api/auth/login").handler(this::loginHandler);
+
     router.get("/api/users/me")
       .handler(jwtAuthHandler)   // 🔥 JWT Handling
       .handler(this::getHomePage);
+
+    /*router.post("/api/fleuzeuge")
+      .handler(jwtAuthHandler)   // 🔥 JWT Handling
+      .handler(this::createFlugzeug);*/
+
+    router.post("/api/flugzeuge")
+      .handler(jwtAuthHandler)  // JWT Handling
+      .handler(this::createFlugzeugHandler);
+
+
+    router.put("/api/flugzeuge/:id")
+      .handler(jwtAuthHandler)  // JWT Handling
+      .handler(this::modifyFlugzeugHandler);
 
 
     pool
@@ -437,6 +463,163 @@ public class MainVerticle extends VerticleBase {
 
     return future;
   }
+
+  private void createFlugzeugHandler(RoutingContext ctx) {
+
+    UUID userId = UUID.fromString(ctx.user().principal().getString("sub"));
+
+    JsonObject json = new JsonObject();
+    ctx.request().formAttributes().forEach(e ->
+      json.put(e.getKey(), e.getValue())
+    );
+
+    Flugzeug flugzeug = Flugzeug.fromJson(json);
+
+    // flugzeugbesitzerId in der Flugzeugbesitzer Tabelle
+    String selectOwner = "SELECT id FROM flugzeugbesitzer WHERE benutzer_id = $1";
+
+    client.preparedQuery(selectOwner)
+      .execute(Tuple.of(userId))
+      .onFailure(err -> ctx.fail(500, err))
+      .onSuccess(rows -> {
+        if (!rows.iterator().hasNext()) {
+          ctx.response().setStatusCode(404).end("Flugzeugbesitzer nicht gefunden");
+          return;
+        }
+
+        UUID flugzeugbesitzerId = rows.iterator().next().getUUID("id");
+        flugzeug.setFlugzeugbesitzerId(flugzeugbesitzerId);
+
+
+
+        // Image
+        if (!ctx.fileUploads().isEmpty()) {
+          FileUpload upload = ctx.fileUploads().iterator().next();
+          String filename = UUID.randomUUID() + "-" + upload.fileName();
+          String target = "uploads/flugzeuge/" + filename;
+
+          try {
+            Files.move(Path.of(upload.uploadedFileName()), Path.of(target));
+            flugzeug.setBild("/uploads/flugzeuge/" + filename);
+          } catch (IOException e) {
+            ctx.fail(e);
+            return;
+          }
+        }
+
+        String sql = """
+    INSERT INTO flugzeug
+    (flugzeugbesitzer_id, kennzeichen, flugzeugtyp, flugzeuggroesse,
+     bild, flugstunden, flugkilometer, treibstoffverbrauch, frachtkapazitaet)
+    VALUES ($1,$2,$3::flugzeugtyp_enum,$4::flugzeuggroesse_enum,$5,$6,$7,$8,$9)
+  """;
+
+
+        client.preparedQuery(sql)
+          .execute(Tuple.of(
+            flugzeug.getFlugzeugbesitzerId(),
+            flugzeug.getKennzeichen(),
+            flugzeug.getFlugzeugtyp().name(),
+            flugzeug.getFlugzeuggroesse().name(),
+            flugzeug.getBild(),
+            flugzeug.getFlugstunden(),
+            flugzeug.getFlugkilometer(),
+            flugzeug.getTreibstoffverbrauch(),
+            flugzeug.getFrachtkapazitaet()
+          ))
+          .onSuccess(v ->
+            ctx.response()
+              .setStatusCode(201)
+              .putHeader("Content-Type", "application/json")
+              .end(new JsonObject()
+                .put("message", "Flugzeug erfolgreich erstellt")
+                .encode())
+          )
+          .onFailure(err -> ctx.fail(500, err));
+
+      });
+  }
+
+
+
+
+  private void modifyFlugzeugHandler(RoutingContext ctx) {
+
+    UUID userId = UUID.fromString(
+      ctx.user().principal().getString("sub")
+    );
+    UUID flugzeugId = UUID.fromString(ctx.pathParam("id"));
+
+    JsonObject json = new JsonObject();
+    ctx.request().formAttributes().forEach(e ->
+      json.put(e.getKey(), e.getValue())
+    );
+
+    Flugzeug flugzeug = Flugzeug.fromJson(json);
+    flugzeug.setId(flugzeugId);
+    flugzeug.setFlugzeugbesitzerId(userId);
+
+    // -------- Image Upload (optional) --------
+    if (!ctx.fileUploads().isEmpty()) {
+      FileUpload upload = ctx.fileUploads().iterator().next();
+      String filename = UUID.randomUUID() + "-" + upload.fileName();
+      String target = "uploads/flugzeuge/" + filename;
+
+      try {
+        Files.move(
+          Path.of(upload.uploadedFileName()),
+          Path.of(target),
+          StandardCopyOption.REPLACE_EXISTING
+        );
+        flugzeug.setBild("/uploads/flugzeuge/" + filename);
+      } catch (IOException e) {
+        ctx.fail(500, e);
+        return;
+      }
+    }
+
+    String sql = """
+    UPDATE flugzeug SET
+      kennzeichen = $1,
+      flugzeugtyp = $2::flugzeugtyp_enum,
+      flugzeuggroesse = $3::flugzeuggroesse_enum,
+      bild = COALESCE($4, bild),
+      flugstunden = $5,
+      flugkilometer = $6,
+      treibstoffverbrauch = $7,
+      frachtkapazitaet = $8
+    WHERE id = $9
+      AND flugzeugbesitzer_id = $10
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(
+        flugzeug.getKennzeichen(),
+        flugzeug.getFlugzeugtyp().name(),
+        flugzeug.getFlugzeuggroesse().name(),
+        flugzeug.getBild(),
+        flugzeug.getFlugstunden(),
+        flugzeug.getFlugkilometer(),
+        flugzeug.getTreibstoffverbrauch(),
+        flugzeug.getFrachtkapazitaet(),
+        flugzeugId,
+        userId
+      ))
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response().setStatusCode(404).end("Flugzeug nicht gefunden");
+        } else {
+          ctx.response()
+            .setStatusCode(200)
+            .end(new JsonObject()
+              .put("message", "Flugzeug erfolgreich aktualisiert")
+              .encode());
+        }
+      })
+      .onFailure(err -> ctx.fail(500, err));
+  }
+
+
 
 
 

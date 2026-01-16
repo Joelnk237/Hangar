@@ -12,7 +12,7 @@ export default function HomeFBesitzer() {
   return (
     <>
       <HeroSub title="Welcome"
-                description="Firmenname"
+          description="Firmenname"
         />
       <DiscoverProperties />
       <Util />

@@ -87,7 +87,7 @@ const Header: React.FC = () => {
 
   const handleSignOut = () => {
     localStorage.removeItem("user");
-    //signOut(); //ICI GERER LE LOGOUT
+    localStorage.removeItem("token");
     setUser(null);
   };
 

@@ -35,6 +35,8 @@ import static hangarByThm.TeamC.HangarByTHM.MainVerticle.DatabaseClient.client;
 
 public class MainVerticle extends VerticleBase {
   private JWTAuth jwtAuth;
+  private FlugzeugbesitzerService flugzeugbesitzerService;
+  private HangaranbieterService hangaranbieterService;
 
   // The following snippet is only necessary if you want to start the server directly using IntelliJ
   public static void main(String[] args) {
@@ -93,6 +95,9 @@ public class MainVerticle extends VerticleBase {
 
     SqlClient pool =  DatabaseClient.getClient(vertx); // Pool für SQL-Abfragen
 
+    this.flugzeugbesitzerService = new FlugzeugbesitzerService(client);
+    this.hangaranbieterService = new HangaranbieterService(client);
+
 
 
     // CORS_konfigurationen: unabhängig von dem Server wo die GET-Anfragen gestartet wurden
@@ -141,7 +146,12 @@ public class MainVerticle extends VerticleBase {
 
     router.put("/api/flugzeuge/:id")
       .handler(jwtAuthHandler)  // JWT Handling
+      .handler(this::flugzeugbesitzerContextHandler)
       .handler(this::modifyFlugzeugHandler);
+
+    router.delete("/api/flugzeuge/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::deleteFlugzeugHandler);
 
 
     pool
@@ -545,9 +555,7 @@ public class MainVerticle extends VerticleBase {
 
   private void modifyFlugzeugHandler(RoutingContext ctx) {
 
-    UUID userId = UUID.fromString(
-      ctx.user().principal().getString("sub")
-    );
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
     UUID flugzeugId = UUID.fromString(ctx.pathParam("id"));
 
     JsonObject json = new JsonObject();
@@ -557,7 +565,7 @@ public class MainVerticle extends VerticleBase {
 
     Flugzeug flugzeug = Flugzeug.fromJson(json);
     flugzeug.setId(flugzeugId);
-    flugzeug.setFlugzeugbesitzerId(userId);
+    flugzeug.setFlugzeugbesitzerId(flugzeugbesitzerId);
 
     // -------- Image Upload (optional) --------
     if (!ctx.fileUploads().isEmpty()) {
@@ -603,7 +611,7 @@ public class MainVerticle extends VerticleBase {
         flugzeug.getTreibstoffverbrauch(),
         flugzeug.getFrachtkapazitaet(),
         flugzeugId,
-        userId
+        flugzeug.getFlugzeugbesitzerId()
       ))
       .onSuccess(res -> {
         if (res.rowCount() == 0) {
@@ -618,6 +626,129 @@ public class MainVerticle extends VerticleBase {
       })
       .onFailure(err -> ctx.fail(500, err));
   }
+
+
+  private void flugzeugbesitzerContextHandler(RoutingContext ctx) {
+
+    UUID benutzerId = UUID.fromString(
+      ctx.user().principal().getString("sub")
+    );
+
+    flugzeugbesitzerService
+      .getFlugzeugbesitzerId(benutzerId)
+      .onSuccess(id -> {
+        ctx.put("flugzeugbesitzerId", id);
+        ctx.next();
+      })
+      .onFailure(err ->
+        ctx.response().setStatusCode(403).end(err.getMessage())
+      );
+  }
+
+  private void hangaranbieterContextHandler(RoutingContext ctx) {
+
+    UUID benutzerId = UUID.fromString(
+      ctx.user().principal().getString("sub")
+    );
+
+    hangaranbieterService
+      .getHAnbieterId(benutzerId)
+      .onSuccess(id -> {
+        ctx.put("anbieterId", id);
+        ctx.next();
+      })
+      .onFailure(err ->
+        ctx.response().setStatusCode(403).end(err.getMessage())
+      );
+  }
+
+  private void deleteFlugzeugHandler(RoutingContext ctx) {
+
+    UUID benutzerId = UUID.fromString(
+      ctx.user().principal().getString("sub")
+    );
+
+    UUID flugzeugId;
+    try {
+      flugzeugId = UUID.fromString(ctx.pathParam("id"));
+    } catch (IllegalArgumentException e) {
+      ctx.response().setStatusCode(400).end("Ungültige Flugzeug-ID");
+      return;
+    }
+
+    // 1. flugzeugbesitzer_id abrufen
+    flugzeugbesitzerService
+      .getFlugzeugbesitzerId(benutzerId)
+
+      // 2.   Bild-Pfad abrufen(optional)
+      .compose(flugzeugbesitzerId -> {
+
+        String selectSql = """
+        SELECT bild
+        FROM flugzeug
+        WHERE id = $1
+          AND flugzeugbesitzer_id = $2
+      """;
+
+        return client
+          .preparedQuery(selectSql)
+          .execute(Tuple.of(flugzeugId, flugzeugbesitzerId))
+          .compose(rows -> {
+
+            if (!rows.iterator().hasNext()) {
+              return Future.failedFuture("NOT_FOUND");
+            }
+
+            String bildPfad = rows.iterator().next().getString("bild");
+
+            // 3. Flugzeug in DB löschen
+            String deleteSql = """
+            DELETE FROM flugzeug
+            WHERE id = $1
+              AND flugzeugbesitzer_id = $2
+          """;
+
+            return client
+              .preparedQuery(deleteSql)
+              .execute(Tuple.of(flugzeugId, flugzeugbesitzerId))
+              .onSuccess(v -> deleteBildIfExists(bildPfad));
+          });
+      })
+
+      // 4 succes
+      .onSuccess(v ->
+        ctx.response()
+          .setStatusCode(200)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Flugzeug erfolgreich gelöscht")
+            .encode())
+      )
+
+      // 5. Error handling
+      .onFailure(err -> {
+        if ("NOT_FOUND".equals(err.getMessage())) {
+          ctx.response().setStatusCode(404).end("Flugzeug nicht gefunden");
+        } else {
+          err.printStackTrace();
+          ctx.response().setStatusCode(500).end("Serverfehler");
+        }
+      });
+  }
+
+  private void deleteBildIfExists(String bildPfad) {
+    if (bildPfad == null || bildPfad.isBlank()) return;
+
+    try {
+      Path path = Path.of("." + bildPfad); // "/uploads/..." → "./uploads/..."
+      Files.deleteIfExists(path);
+    } catch (IOException e) {
+      System.err.println(" Bild konnte nicht gelöscht werden: " + e.getMessage());
+    }
+  }
+
+
+
 
 
 

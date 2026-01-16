@@ -6,7 +6,7 @@ import Loader from "../shared/Loader";
 
 type FlugzeugFormProps = {
   mode: "create" | "edit";
-  initialData?: FlugzeugFormData;
+  initialData?: FlugzeugFormData & { id?: string };
   onSuccess?: () => void;
 };
 
@@ -32,6 +32,7 @@ const flugzeugKonfig = {
 const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<{ id: any, rolle: any, email:any } | null>(null);
 
   const [formData, setFormData] = useState<FlugzeugFormData>({
     kennzeichen: "",
@@ -51,6 +52,13 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
       setFormData({ ...initialData, bild: null });
     }
   }, [mode, initialData]);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));}
+      console.log(user);
+  }, [])
 
   /* -------- Handler -------- */
 
@@ -73,27 +81,43 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
     setLoading(true);
 
     try {
-      const payload = {
-        ...formData,
-      };
+      const token = localStorage.getItem("token");
+      
+      
+      
+      if (!token) throw new Error("Nicht authentifiziert");
+
+      const form = new FormData();
+
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value !== "" && value !== null) {
+          form.append(key, String(value));
+        }
+      });
+
+      if (formData.bild) {
+        form.append("bild", formData.bild);
+      }
+      form.append("flugzeugbesitzerId", user?.id);
+
 
       const res = await fetch(
         mode === "create"
           ? "http://localhost:8888/api/flugzeuge"
-          : "http://localhost:8888/api/flugzeuge/update",
+          : `http://localhost:8888/api/flugzeuge/${initialData?.id}`,
         {
           method: mode === "create" ? "POST" : "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: form,
         }
       );
 
-      if (!res.ok) {
-        throw new Error("Fehler beim Speichern des Flugzeugs");
-      }
+      if (!res.ok) throw new Error("Speichern fehlgeschlagen");
 
       onSuccess?.();
-      router.push("/dashboard/flugzeuge");
+      router.push("/flugzeuge");
     } catch (err: any) {
       alert(err.message || "Unbekannter Fehler");
     } finally {

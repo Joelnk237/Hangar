@@ -15,6 +15,12 @@ export default function HomeFBesitzer() {
 
   useEffect(() => {
     const fetchUser = async () => {
+
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+      setUser(JSON.parse(storedUser));
+      console.log(user);
+    }
       const token = localStorage.getItem("token");
       if (!token) {
         router.push("/login");

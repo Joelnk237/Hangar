@@ -328,7 +328,7 @@ const handleServiceUnit = (service: ServiceKey, value: string) => {
     const data = await res.json();
       //await new Promise((resolve) => setTimeout(resolve, 2000));
       //localStorage.setItem("user", JSON.stringify(data.user));
-      router.push("/signin");
+      router.push("/");
     } catch (error: any) {
       console.error("Registration Error:", error);
     alert(error.message || "Ein Fehler ist aufgetreten");

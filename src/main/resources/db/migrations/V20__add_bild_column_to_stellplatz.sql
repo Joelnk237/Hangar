@@ -1,0 +1,2 @@
+ALTER TABLE stellplatz
+  ADD COLUMN bild VARCHAR(255);

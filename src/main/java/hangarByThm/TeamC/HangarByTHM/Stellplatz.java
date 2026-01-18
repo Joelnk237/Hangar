@@ -13,6 +13,7 @@ public class Stellplatz {
   private Flugzeuggroesse flugzeuggroesse;
   private String standort;
   private String besonderheit;
+  private String bild;
   private Boolean availability;
 
   /* ===================== GETTERS / SETTERS ===================== */
@@ -64,6 +65,13 @@ public class Stellplatz {
   public void setStandort(String standort) {
     this.standort = standort;
   }
+  public String getBild() {
+    return bild;
+  }
+
+  public void setBild(String bild) {
+    this.bild = bild;
+  }
 
   public String getBesonderheit() {
     return besonderheit;
@@ -92,7 +100,9 @@ public class Stellplatz {
       .put("flugzeuggroesse", flugzeuggroesse != null ? flugzeuggroesse.name() : null)
       .put("standort", standort)
       .put("besonderheit", besonderheit)
+      .put("bild", bild != null ? bild : null)
       .put("availability", availability);
+
   }
 
   public static Stellplatz fromJson(JsonObject json) {
@@ -111,6 +121,7 @@ public class Stellplatz {
       s.setFlugzeuggroesse(Flugzeuggroesse.valueOf(json.getString("flugzeuggroesse")));
 
     s.setKennzeichen(json.getString("kennzeichen"));
+    s.setBild(json.getString("bild"));
     s.setStandort(json.getString("standort"));
     s.setBesonderheit(json.getString("besonderheit"));
     s.setAvailability(json.getBoolean("availability", true));

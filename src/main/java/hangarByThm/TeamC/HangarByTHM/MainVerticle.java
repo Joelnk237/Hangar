@@ -176,6 +176,12 @@ public class MainVerticle extends VerticleBase {
     router.get("/api/stellplaetze/:id")
       .handler(this::getStellplatzInfosHandler);
 
+    router.post("/api/stellplaetze")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::createStellplatzHandler);
+
+
 
 
 
@@ -1013,6 +1019,115 @@ public class MainVerticle extends VerticleBase {
           .end(stellplatz.toJson().encode());
       });
   }
+
+  private void createStellplatzHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+
+    // ---------- FORM DATA ----------
+    JsonObject json = new JsonObject();
+    ctx.request().formAttributes().forEach(e ->
+      json.put(e.getKey(), e.getValue())
+    );
+
+    Stellplatz stellplatz = Stellplatz.fromJson(json);
+    stellplatz.setHangaranbieterId(hangaranbieterId);
+
+    // ---------- IMAGE UPLOAD ----------
+    if (!ctx.fileUploads().isEmpty()) {
+      FileUpload upload = ctx.fileUploads().iterator().next();
+      String filename = UUID.randomUUID() + "-" + upload.fileName();
+      String target = "uploads/stellplaetze/" + filename;
+
+      try {
+        Files.createDirectories(Path.of("uploads/stellplaetze"));
+        Files.move(Path.of(upload.uploadedFileName()), Path.of(target));
+        stellplatz.setBild("/uploads/stellplaetze/" + filename);
+      } catch (IOException e) {
+        ctx.fail(500, e);
+        return;
+      }
+    }
+
+    // ---------- INSERT STELLPLATZ ----------
+    String sql = """
+    INSERT INTO stellplatz
+    (hangaranbieter_id, kennzeichen, besonderheit, bild,
+     flugzeugtyp, flugzeuggroesse, standort, availability)
+    VALUES ($1,$2,$3,$4,$5::flugzeugtyp_enum,$6::flugzeuggroesse_enum,$7,$8)
+    RETURNING id
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(
+        stellplatz.getHangaranbieterId(),
+        stellplatz.getKennzeichen(),
+        stellplatz.getBesonderheit(),
+        stellplatz.getBild(),
+        stellplatz.getFlugzeugtyp() != null ? stellplatz.getFlugzeugtyp().name() : null,
+        stellplatz.getFlugzeuggroesse() != null ? stellplatz.getFlugzeuggroesse().name() : null,
+        stellplatz.getStandort(),
+        true
+      ))
+      .compose(rows -> {
+
+        UUID stellplatzId = rows.iterator().next().getUUID("id");
+
+        // ---------- SERVICES ----------
+        List<String> services =
+          ctx.request().formAttributes().getAll("services");
+
+        if (services == null || services.isEmpty()) {
+          return Future.succeededFuture();
+        }
+
+        return insertServicesForStellplatz(stellplatzId, services);
+      })
+      .onSuccess(v ->
+        ctx.response()
+          .setStatusCode(201)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Stellplatz erfolgreich erstellt")
+            .encode())
+      )
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.fail(500, err);
+      });
+  }
+
+  private Future<Void> insertServicesForStellplatz(
+    UUID stellplatzId,
+    List<String> services
+  ) {
+
+    return insertSequentially(services, serviceName -> {
+
+      String sqlGetServiceId =
+        "SELECT id FROM service WHERE bezeichnung = $1::servicename_enum";
+
+      return client.preparedQuery(sqlGetServiceId)
+        .execute(Tuple.of(serviceName))
+        .compose(rows -> {
+          if (!rows.iterator().hasNext()) {
+            return Future.failedFuture("Service nicht gefunden: " + serviceName);
+          }
+
+          Integer serviceId = rows.iterator().next().getInteger("id");
+
+          String insertSql = """
+          INSERT INTO service_zu_stellplatz (stellplatz_id, service_id)
+          VALUES ($1,$2)
+        """;
+
+          return client.preparedQuery(insertSql)
+            .execute(Tuple.of(stellplatzId, serviceId))
+            .mapEmpty();
+        });
+    });
+  }
+
 
 
 

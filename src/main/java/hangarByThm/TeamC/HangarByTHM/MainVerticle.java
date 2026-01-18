@@ -26,7 +26,9 @@ import io.vertx.ext.auth.PubSecKeyOptions;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static hangarByThm.TeamC.HangarByTHM.MainVerticle.DatabaseClient.client;
@@ -122,11 +124,7 @@ public class MainVerticle extends VerticleBase {
 
     router.route("/uploads/*").handler(StaticHandler.create("uploads"));
 
-
-
     // Alle Routen (GET, POST, GET,...) definieren
-    /*router.get("/")
-      .handler(this::home);*/
 
     router.post("/api/auth/register").handler(this::registerHandler);
     router.post("/api/auth/login").handler(this::loginHandler);
@@ -152,6 +150,9 @@ public class MainVerticle extends VerticleBase {
     router.delete("/api/flugzeuge/:id")
       .handler(jwtAuthHandler)
       .handler(this::deleteFlugzeugHandler);
+
+    router.get("/api/flugzeuge/:id")
+      .handler(this::getFlugzeugInfosHandler);
 
     router.get("/api/flugzeuge")
       .handler(jwtAuthHandler)
@@ -180,6 +181,12 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::createStellplatzHandler);
+
+    router.get("/api/stellplaetze")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::getMyStellplaetzeHandler);
+
 
 
 
@@ -796,7 +803,7 @@ public class MainVerticle extends VerticleBase {
       flugstunden,
       flugkilometer,
       treibstoffverbrauch,
-      frachtkapazitaet
+      frachtkapazitaet, belegt
     FROM flugzeug
     WHERE flugzeugbesitzer_id = $1
     ORDER BY kennzeichen
@@ -817,6 +824,7 @@ public class MainVerticle extends VerticleBase {
 
         rows.forEach(row -> {
           Flugzeug f = new Flugzeug();
+          f.setStatus(row.getBoolean("belegt"));
 
           f.setId(row.getUUID("id"));
           f.setFlugzeugbesitzerId(row.getUUID("flugzeugbesitzer_id"));
@@ -1127,6 +1135,104 @@ public class MainVerticle extends VerticleBase {
         });
     });
   }
+
+
+  private void getMyStellplaetzeHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+
+    String sqlStellplaetze = """
+    SELECT
+      id,
+      kennzeichen,
+      besonderheit,
+      standort,
+      availability,
+      bild,
+      flugzeugtyp,
+      flugzeuggroesse
+    FROM stellplatz
+    WHERE hangaranbieter_id = $1
+    ORDER BY kennzeichen
+  """;
+
+    String sqlServices = """
+    SELECT
+      szs.stellplatz_id,
+      s.bezeichnung,
+      a.preis,
+      a.einheit
+    FROM service_zu_stellplatz szs
+    JOIN service s ON s.id = szs.service_id
+    JOIN angebotene_services a
+      ON a.service_id = s.id
+    WHERE a.hangaranbieter_id = $1
+  """;
+
+    JsonArray response = new JsonArray();
+    Map<UUID, JsonObject> stellplatzMap = new HashMap<>();
+
+    // Stellplätze laden
+    client.preparedQuery(sqlStellplaetze)
+      .execute(Tuple.of(hangaranbieterId))
+      .compose(rows -> {
+
+        rows.forEach(row -> {
+          UUID id = row.getUUID("id");
+
+          JsonObject stellplatzJson = new JsonObject()
+            .put("id", id.toString())
+            .put("kennzeichen", row.getString("kennzeichen"))
+            .put("besonderheit", row.getString("besonderheit"))
+            .put("standort", row.getString("standort"))
+            .put("availability", row.getBoolean("availability"))
+            .put("bild", row.getString("bild"))
+            .put("flugzeugtyp", row.getString("flugzeugtyp"))
+            .put("flugzeuggroesse", row.getString("flugzeuggroesse"))
+            .put("services", new JsonArray());
+
+          stellplatzMap.put(id, stellplatzJson);
+          response.add(stellplatzJson);
+        });
+
+        // Services laden
+        return client
+          .preparedQuery(sqlServices)
+          .execute(Tuple.of(hangaranbieterId));
+      })
+      .onSuccess(serviceRows -> {
+
+        serviceRows.forEach(row -> {
+          UUID stellplatzId = row.getUUID("stellplatz_id");
+
+          JsonObject serviceJson = new JsonObject()
+            .put("bezeichnung", row.getString("bezeichnung"))
+            .put("preis", row.getBigDecimal("preis") != null
+              ? row.getBigDecimal("preis").doubleValue()
+              : null)
+            .put("einheit", row.getString("einheit"));
+
+          JsonObject stellplatz =
+            stellplatzMap.get(stellplatzId);
+
+          if (stellplatz != null) {
+            stellplatz
+              .getJsonArray("services")
+              .add(serviceJson);
+          }
+        });
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .setStatusCode(200)
+          .end(response.encode());
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.fail(500, err);
+      });
+  }
+
 
 
 

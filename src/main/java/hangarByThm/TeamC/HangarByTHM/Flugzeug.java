@@ -16,6 +16,7 @@ public class Flugzeug {
   private Integer flugkilometer;
   private Double treibstoffverbrauch;
   private Integer frachtkapazitaet;
+  private boolean status;
 
   /* ===================== GETTERS / SETTERS ===================== */
 
@@ -66,6 +67,13 @@ public class Flugzeug {
   public void setBild(String bild) {
     this.bild = bild;
   }
+  public String getStatus() {
+    return status;
+  }
+
+  public void setStatus(boolean status) {
+    this.status = status;
+  }
 
   public Integer getFlugstunden() {
     return flugstunden;
@@ -109,10 +117,12 @@ public class Flugzeug {
       .put("flugzeuggroesse", flugzeuggroesse != null ? flugzeuggroesse.name() : null)
       .put("kennzeichen", kennzeichen)
       .put("bild", bild)
+      .put("status", status)
       .put("flugstunden", flugstunden)
       .put("flugkilometer", flugkilometer)
       .put("treibstoffverbrauch", treibstoffverbrauch)
       .put("frachtkapazitaet", frachtkapazitaet);
+
   }
 
   public static Flugzeug fromJson(JsonObject json) {
@@ -134,7 +144,7 @@ public class Flugzeug {
     f.setBild(json.getString("bild"));
     f.setFlugstunden(Integer.parseInt(json.getString("flugstunden")));
     f.setFlugkilometer(Integer.parseInt(json.getString("flugkilometer")));
-    f.setTreibstoffverbrauch((double) Integer.parseInt(json.getString("treibstoffverbrauch")));
+    f.setTreibstoffverbrauch(Double.parseDouble(json.getString("treibstoffverbrauch")));
     f.setFrachtkapazitaet(Integer.parseInt(json.getString("frachtkapazitaet")));
 
     return f;

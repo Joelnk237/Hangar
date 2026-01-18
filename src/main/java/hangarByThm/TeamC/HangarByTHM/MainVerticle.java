@@ -153,6 +153,33 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::deleteFlugzeugHandler);
 
+    router.get("/api/flugzeuge")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::getMyFlugzeugeHandler);
+
+    router.get("/api/hangaranbieter/spezialisierungen")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::getHangarSpezialisierungenHandler);
+
+    router.get("/api/hangaranbieter/services")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::getAngeboteneServicesHandler);
+
+    router.get("/api/hangaranbieter/zusatzservices")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::getZusatzservicesHandler);
+
+    router.get("/api/stellplaetze/:id")
+      .handler(this::getStellplatzInfosHandler);
+
+
+
+
+
 
     pool
       .query("SELECT 1")
@@ -746,6 +773,251 @@ public class MainVerticle extends VerticleBase {
       System.err.println(" Bild konnte nicht gelöscht werden: " + e.getMessage());
     }
   }
+
+
+  private void getMyFlugzeugeHandler(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+
+    String sql = """
+    SELECT
+      id,
+      flugzeugbesitzer_id,
+      flugzeugtyp,
+      flugzeuggroesse,
+      kennzeichen,
+      bild,
+      flugstunden,
+      flugkilometer,
+      treibstoffverbrauch,
+      frachtkapazitaet
+    FROM flugzeug
+    WHERE flugzeugbesitzer_id = $1
+    ORDER BY kennzeichen
+  """;
+
+    client
+      .preparedQuery(sql)
+      .execute(Tuple.of(flugzeugbesitzerId))
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler beim Laden der Flugzeuge");
+      })
+      .onSuccess(rows -> {
+
+        JsonArray result = new JsonArray();
+
+        rows.forEach(row -> {
+          Flugzeug f = new Flugzeug();
+
+          f.setId(row.getUUID("id"));
+          f.setFlugzeugbesitzerId(row.getUUID("flugzeugbesitzer_id"));
+          f.setKennzeichen(row.getString("kennzeichen"));
+          f.setBild(row.getString("bild"));
+
+          if (row.getString("flugzeugtyp") != null) {
+            f.setFlugzeugtyp(
+              Flugzeugtyp.valueOf(row.getString("flugzeugtyp"))
+            );
+          }
+
+          if (row.getString("flugzeuggroesse") != null) {
+            f.setFlugzeuggroesse(
+              Flugzeuggroesse.valueOf(row.getString("flugzeuggroesse"))
+            );
+          }
+
+          f.setFlugstunden(row.getInteger("flugstunden"));
+          f.setFlugkilometer(row.getInteger("flugkilometer"));
+          f.setTreibstoffverbrauch(
+            row.getBigDecimal("treibstoffverbrauch") != null
+              ? row.getBigDecimal("treibstoffverbrauch").doubleValue()
+              : null
+          );
+          f.setFrachtkapazitaet(row.getInteger("frachtkapazitaet"));
+
+          result.add(f.toJson());
+        });
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .setStatusCode(200)
+          .end(result.encode());
+      });
+  }
+
+  private void getHangarSpezialisierungenHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+
+    String sqlTypen = """
+    SELECT flugzeugtyp
+    FROM hangaranbieter_flugzeugtypen
+    WHERE hangaranbieter_id = $1
+  """;
+
+    String sqlGroessen = """
+    SELECT flugzeuggroesse
+    FROM hangaranbieter_flugzeuggroessen
+    WHERE hangaranbieter_id = $1
+  """;
+
+    JsonObject result = new JsonObject();
+
+    client
+      .preparedQuery(sqlTypen)
+      .execute(Tuple.of(hangaranbieterId))
+      .compose(typenRows -> {
+
+        JsonArray typen = new JsonArray();
+        typenRows.forEach(r ->
+          typen.add(r.getString("flugzeugtyp"))
+        );
+
+        result.put("flugzeugtypen", typen);
+
+        return client
+          .preparedQuery(sqlGroessen)
+          .execute(Tuple.of(hangaranbieterId));
+      })
+      .onSuccess(groessenRows -> {
+
+        JsonArray groessen = new JsonArray();
+        groessenRows.forEach(r ->
+          groessen.add(r.getString("flugzeuggroesse"))
+        );
+
+        result.put("flugzeuggroessen", groessen);
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(result.encode());
+      })
+      .onFailure(err -> ctx.fail(500, err));
+  }
+
+  private void getAngeboteneServicesHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+
+    String sql = """
+    SELECT s.id AS service_id,
+           s.bezeichnung,
+           a.preis,
+           a.einheit
+    FROM angebotene_services a
+    JOIN service s ON s.id = a.service_id
+    WHERE a.hangaranbieter_id = $1
+  """;
+
+    client
+      .preparedQuery(sql)
+      .execute(Tuple.of(hangaranbieterId))
+      .onSuccess(rows -> {
+
+        JsonArray services = new JsonArray();
+
+        rows.forEach(row ->
+          services.add(
+            AngeboteneService.fromRow(row).toJson()
+          )
+        );
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(services.encode());
+      })
+      .onFailure(err -> ctx.fail(500, err));
+  }
+
+  private void getZusatzservicesHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+
+    String sql = """
+    SELECT *
+    FROM zusatzservice
+    WHERE hangaranbieter_id = $1
+  """;
+
+    client
+      .preparedQuery(sql)
+      .execute(Tuple.of(hangaranbieterId))
+      .onSuccess(rows -> {
+
+        JsonArray result = new JsonArray();
+
+        rows.forEach(row ->
+          result.add(Zusatzservice.fromRow(row).toJson())
+        );
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(result.encode());
+      })
+      .onFailure(err -> ctx.fail(500, err));
+  }
+
+  private void getStellplatzInfosHandler(RoutingContext ctx) {
+
+    UUID stellplatzId;
+    try {
+      stellplatzId = UUID.fromString(ctx.pathParam("id"));
+    } catch (IllegalArgumentException e) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("Ungültige Stellplatz-ID");
+      return;
+    }
+
+    String sql = """
+    SELECT
+      id,
+      hangaranbieter_id,
+      kennzeichen,
+      flugzeugtyp,
+      flugzeuggroesse,
+      standort,
+      besonderheit,
+      availability
+    FROM stellplatz
+    WHERE id = $1
+  """;
+
+    client
+      .preparedQuery(sql)
+      .execute(Tuple.of(stellplatzId))
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler beim Laden des Stellplatzes");
+      })
+      .onSuccess(rows -> {
+
+        if (!rows.iterator().hasNext()) {
+          ctx.response()
+            .setStatusCode(404)
+            .end("Stellplatz nicht gefunden");
+          return;
+        }
+
+        Stellplatz stellplatz =
+          Stellplatz.fromRow(rows.iterator().next());
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .setStatusCode(200)
+          .end(stellplatz.toJson().encode());
+      });
+  }
+
+
+
+
+
 
 
 

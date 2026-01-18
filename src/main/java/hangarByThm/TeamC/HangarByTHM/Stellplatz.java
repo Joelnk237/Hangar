@@ -2,6 +2,7 @@ package hangarByThm.TeamC.HangarByTHM;
 
 import io.vertx.core.json.JsonObject;
 import java.util.UUID;
+import io.vertx.sqlclient.Row;
 
 public class Stellplatz {
 
@@ -116,5 +117,31 @@ public class Stellplatz {
 
     return s;
   }
+
+  public static Stellplatz fromRow(Row row) {
+    Stellplatz s = new Stellplatz();
+
+    s.setId(row.getUUID("id"));
+    s.setHangaranbieterId(row.getUUID("hangaranbieter_id"));
+    s.setKennzeichen(row.getString("kennzeichen"));
+    s.setStandort(row.getString("standort"));
+    s.setBesonderheit(row.getString("besonderheit"));
+    s.setAvailability(row.getBoolean("availability"));
+
+    // Enums PostgreSQL -> Java enums
+    String flugzeugtypStr = row.getString("flugzeugtyp");
+    if (flugzeugtypStr != null) {
+      s.setFlugzeugtyp(Flugzeugtyp.valueOf(flugzeugtypStr));
+    }
+
+    String flugzeuggroesseStr = row.getString("flugzeuggroesse");
+    if (flugzeuggroesseStr != null) {
+      s.setFlugzeuggroesse(Flugzeuggroesse.valueOf(flugzeuggroesseStr));
+    }
+
+    return s;
+  }
+
+
 }
 

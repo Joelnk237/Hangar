@@ -75,7 +75,7 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
     services:{},
   });
 
-  /* ----------- PREFILL EN MODE EDIT ----------- */
+  /* -----------  MODE EDIT ----------- */
 
   useEffect(() => {
   const token = localStorage.getItem("token");
@@ -174,37 +174,64 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
   /* ------------------ SUBMIT ------------------ */
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      const payload = {
-        ...formData,
-        services: Object.entries(formData.services)
-          .filter(([_, v]) => v)
-          .map(([k]) => k),
-      };
+  try {
+    const fd = new FormData();
 
-      const res = await fetch(
-        mode === "create"
-          ? "http://localhost:8888/api/stellplaetze"
-          : "http://localhost:8888/api/stellplaetze/update",
-        {
-          method: mode === "create" ? "POST" : "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
+    // Champs communs
+    fd.append("kennzeichen", formData.kennzeichen);
+    fd.append("standort", formData.standort);
+    fd.append("besonderheit", formData.besonderheit);
+    fd.append("flugzeugtyp", formData.flugzeugtyp);
+    fd.append("flugzeuggroesse", formData.flugzeuggroesse);
 
-      if (!res.ok) throw new Error("Speichern fehlgeschlagen");
-
-      router.push("/dashboard");
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setLoading(false);
+    // Image uniquement si présente
+    if (formData.bild) {
+      fd.append("bild", formData.bild);
     }
-  };
+
+    // Services sélectionnés
+    Object.entries(formData.services)
+      .filter(([_, enabled]) => enabled)
+      .forEach(([service]) => {
+        fd.append("services", service);
+      });
+
+    // Mode EDIT → envoyer l'id
+    if (mode === "edit" && stellplatzInfos?.id) {
+      fd.append("id", stellplatzInfos.id.toString());
+    }
+
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(
+      mode === "create"
+        ? "http://localhost:8888/api/stellplaetze"
+        : `http://localhost:8888/api/stellplaetze/${stellplatzInfos?.id}`,
+      {
+        method: mode === "create" ? "POST" : "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: fd,
+      }
+    );
+
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || "Speichern fehlgeschlagen");
+    }
+
+    router.push("/dashboard");
+  } catch (err: any) {
+    alert(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   /* ------------------ JSX ------------------ */
   if (!hAnbieterInfos) {
@@ -221,7 +248,7 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
               <input
                 type="text"
                 placeholder="Kennzeichen"
-                name="firmenkennzeichenname"
+                name="kennzeichen"
                 value={formData.kennzeichen}
                 onChange={handleInputChange}
                 required

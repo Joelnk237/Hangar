@@ -8,6 +8,7 @@ export const metadata: Metadata = {
 
 const Page = () => {
     const stellplatzInfos = {
+        id:"4555878",
         kennzeichen: "NKJG2",
         standort: "Frankfurt",
         besonderheit: " Gut für Sie",

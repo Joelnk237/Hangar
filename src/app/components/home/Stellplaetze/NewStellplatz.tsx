@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Loader from "../../shared/Loader";
 /* ------------------ CONFIG HANGARANBIETER ------------------ */
 
-const hAnbieterInfos = {
+/*const hAnbieterInfos = {
   services: {
     einlagerung: { price: 30, unit: "pro Tag" },
     flugbereitschaft: { price: 45, unit: "pro Vorgang" },
@@ -14,6 +14,15 @@ const hAnbieterInfos = {
   },
   flugzeugtyp: ["SEP", "MEP", "Helikopter"],
   flugzeugsgrösse: ["XS", "S", "M"],
+};*/
+
+type AnbieterInfos = {
+  flugzeugtyp: string[];
+  flugzeugsgrösse: string[];
+  services: Record<
+    string,
+    { price: number; unit: string }
+  >;
 };
 
 /* ------------------ TYPES ------------------ */
@@ -21,6 +30,7 @@ const hAnbieterInfos = {
 type Mode = "create" | "edit";
 
 type StellplatzInfos = {
+  id:String,
   services: Record<
     string,
     { enabled: boolean; price: number; unit: string }
@@ -52,6 +62,8 @@ type StellplatzFormProps = {
 const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [hAnbieterInfos, setHAnbieterInfos] =
+  useState<AnbieterInfos | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
     kennzeichen: "",
@@ -60,13 +72,57 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
     bild: null,
     flugzeugtyp: "",
     flugzeuggroesse: "",
-    services: Object.keys(hAnbieterInfos.services).reduce(
-      (acc, key) => ({ ...acc, [key]: false }),
-      {}
-    ),
+    services:{},
   });
 
   /* ----------- PREFILL EN MODE EDIT ----------- */
+
+  useEffect(() => {
+  const token = localStorage.getItem("token");
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  Promise.all([
+    fetch("http://localhost:8888/api/hangaranbieter/spezialisierungen", {
+      headers,
+    }).then(res => res.json()),
+
+    fetch("http://localhost:8888/api/hangaranbieter/services", {
+      headers,
+    }).then(res => res.json()),
+  ])
+    .then(([spez, services]) => {
+      const servicesMap: Record<string, { price: number; unit: string }> = {};
+
+      services.forEach((s: any) => {
+        servicesMap[s.bezeichnung] = {
+          price: s.preis,
+          unit: s.einheit,
+        };
+      });
+
+      setHAnbieterInfos({
+        flugzeugtyp: spez.flugzeugtypen,
+        flugzeugsgrösse: spez.flugzeuggroessen,
+        services: servicesMap,
+      });
+
+      // Initialiser les services du formulaire
+      setFormData(prev => ({
+        ...prev,
+        services: Object.keys(servicesMap).reduce(
+          (acc, k) => ({ ...acc, [k]: false }),
+          {}
+        ),
+      }));
+    })
+    .catch(err => {
+      console.error("Fehler beim Laden der Anbieter-Daten", err);
+    });
+}, []);
+
 
   useEffect(() => {
     if (mode === "edit" && stellplatzInfos) {
@@ -151,6 +207,9 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
   };
 
   /* ------------------ JSX ------------------ */
+  if (!hAnbieterInfos) {
+   return <Loader />;
+  }
 
   return (
     <div className="pt-20 pb-32 bg-light dark:bg-darkmode">
@@ -266,10 +325,6 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
 
   </div>
 </div>
-
-
-
-
             <div className="mb-9">
               <button
                 type="submit"

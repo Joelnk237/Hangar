@@ -11,7 +11,10 @@ interface StellplatzCardProps {
   showActions?: boolean;
 }
 
-const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, showActions }) => {  
+const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, showActions }) => { 
+  const serviceLabels = stellplatz.services
+  ?.map(service => service.bezeichnung)
+  .join(", "); 
   
   return (
     <div
@@ -23,7 +26,9 @@ const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, s
         <div className={`relative ${viewMode=="list" && 'w-[30%]'}`}>
           <div className={`imageContainer h-[250px] w-full ${viewMode =="list" && 'h-full md:h-52'}`}>
             <Image
-              src={stellplatz?.image}
+              src={stellplatz.bild
+      ? `http://localhost:8888${stellplatz.bild}`
+      : "/images/properties/stellplatz-placeholder.jpg"}
               alt={`Image of place ${stellplatz.id}`}
               width={400}
               height={250}
@@ -31,7 +36,7 @@ const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, s
             />
           </div>
           <p className="absolute top-[10px] left-[10px] py-1 px-4 bg-white rounded-md text-primary items-center">
-            {stellplatz.status} {/* METTRE LE TAG */}
+            {stellplatz.availability ? `frei`: `besetzt`} {/* METTRE LE TAG */}
           </p>
           {/*<svg
             xmlns="http://www.w3.org/2000/svg"
@@ -58,36 +63,32 @@ const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, s
 
             <div className="flex justify-between items-center pb-4">
               <div className="font-bold text-2xl group-hover:text-primary text-midnight_text dark:text-white">
-                {stellplatz.id}
+                {stellplatz.kennzeichen}
               </div>
               <div className="text-xs bg-[#DAE7FF] dark:bg-white text-midnight_text dark:text-primary py-1 px-2 rounded-lg font-bold">
-                {stellplatz.ort}
+                {stellplatz.standort}
               </div>
             </div>
           </div>
 
           <div className="flex gap-2 flex-wrap justify-between">
             <div className="flex flex-row">
-              <p className="md:text-xl font-bold flex gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-move-horizontal-icon lucide-move-horizontal"><path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/></svg>
-                {stellplatz.abmessung.spannweite}
-              </p>
-              <p className="md:text-xl text-sm font-bold flex gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-move-vertical-icon lucide-move-vertical"><path d="M12 2v20"/><path d="m8 18 4 4 4-4"/><path d="m8 6 4-4 4 4"/></svg>
-                {stellplatz.abmessung.laenge}
-              </p>
-              <p className="md:text-xl text-lg font-bold flex gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-triangle-right-icon lucide-triangle-right"><path d="M22 18a2 2 0 0 1-2 2H3c-1.1 0-1.3-.6-.4-1.3L20.4 4.3c.9-.7 1.6-.4 1.6.7Z"/></svg>
-                {stellplatz.abmessung.hoehe}
-              </p>
+              {stellplatz.services && stellplatz.services.length > 0 && (
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
+                  <span className="font-semibold text-midnight_text dark:text-white">
+                    Services:
+                  </span>{" "}
+                  {serviceLabels}
+                </p>
+              )}
             </div>
-            <div className="flex flex-col">
+            {/*<div className="flex flex-col">
               <p className="md:text-xl text-lg font-bold flex gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-cloud-rain-wind-icon lucide-cloud-rain-wind"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="m9.2 22 3-7"/><path d="m9 13-3 7"/><path d="m17 13-3 7"/></svg>
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-shield-icon lucide-shield"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-door-open-icon lucide-door-open"><path d="M11 20H2"/><path d="M11 4.562v16.157a1 1 0 0 0 1.242.97L19 20V5.562a2 2 0 0 0-1.515-1.94l-4-1A2 2 0 0 0 11 4.561z"/><path d="M11 4H8a2 2 0 0 0-2 2v14"/><path d="M14 12h.01"/><path d="M22 20h-3"/></svg>
               </p>
-            </div>
+            </div>*/}
             {/*<div className="flex flex-col">
               <p className="md:text-xl text-lg font-bold flex gap-2">
                 {stellplatz.einlagerung.preis} €

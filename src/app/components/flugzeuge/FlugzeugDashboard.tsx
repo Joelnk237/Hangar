@@ -4,83 +4,50 @@ import { Icon } from "@iconify/react";
 import Image from 'next/image';
 import { PropertyContext } from '@/context-api/PropertyContext';
 import FlugzeugCard from '../home/property-list/property-card';
+import { Flugzeug } from "@/app/types/property/flugzeug";
 import Link from "next/link";
+import { Loader } from 'lucide-react';
 import { useRouter } from "next/navigation";
 
 export default function FlugzeugDashboard({ category }: { category?: string }) {
-    const [price, setPrice] = useState(50);
-    const [price1, setPrice1] = useState(50);
+    const [flugzeuge, setFlugzeuge] = useState<Flugzeug[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const { properties, updateFilter, filters } = useContext(PropertyContext)!;
     const [sortOrder, setSortOrder] = useState("none");
     const [isOffCanvasOpen, setIsOffCanvasOpen] = useState(false);
     const [searchData, setSearchData] = useState<any>([]);
 
-    const Flugzeuge = [
-        // Flugzeuge
-        {
-          id: '1',
-          property_img: "/images/properties/airbus-1.jpg",
-          property_title: "Cessna",
-          property_price: "D-ABCD",
-          category: "apartment",
-          category_img: "/images/property_option/apartment.svg",
-          rooms: 11.0,
-          bathrooms: 8.3,
-          location: "California",
-          livingArea: "15",
-          tag: "abgestellt",
-          check: true,
-          status: "Buy",
-          type: "Apartment",
-          beds: 2,
-          garages: 0,
-          region: "south",
-          name: "Property 1",
-          slug: "modern-apartment"
+    useEffect(() => {
+  const fetchFlugzeuge = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Nicht authentifiziert");
+
+      const res = await fetch("http://localhost:8888/api/flugzeuge", {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      {
-    id: '2',
-    property_img: "/images/properties/aircraft-2.jpg",
-    property_title: "Jet",
-    property_price: "D-EFGH",
-    category: "apartment",
-    category_img: "/images/property_option/apartment.svg",
-    rooms: 1.2,
-    bathrooms: 4,
-    location: "Texas",
-    livingArea: "8",
-    tag: "abgestellt",
-    check: true,
-    status: "Buy",
-    type: "Apartment",
-    beds: 3,
-    garages: 1,
-    region: "north",
-    name: "Property 2",
-    slug: "city-apartment"
-  },
-  {
-    id: '3',
-    property_img: "/images/properties/airbus-3.jpg",
-    property_title: "Cirrus",
-    property_price: "D-IJET",
-    category: "apartment",
-    category_img: "/images/property_option/apartment.svg",
-    rooms: 35,
-    bathrooms: 12,
-    location: "New York",
-    livingArea: "5",
-    tag: "noch nicht",
-    check: true,
-    status: "Buy",
-    type: "Apartment",
-    beds: 4,
-    garages: 1,
-    region: "east",
-    name: "Property 3",
-    slug: "luxury-apartment"
-  },] ;
+      });
+
+      if (!res.ok) {
+        throw new Error("Fehler beim Laden der Flugzeuge");
+      }
+
+      const data = await res.json();
+      setFlugzeuge(data);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchFlugzeuge();
+}, []);
 
 
 
@@ -128,6 +95,10 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
     const filteredCount = sortedProperties.length;
     const router = useRouter();
 
+    if (loading) {
+        return <Loader/>
+    }
+
     return (
         <>
             
@@ -141,7 +112,7 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                         <div className='col-span-12 lg:col-span-12'>
                             <div className="flex lg:flex-nowrap flex-wrap lg:gap-0 gap-6 w-full justify-between items-center pb-8">
                                 <div className="flex w-full justify-between px-4 flex-1">
-                                    <h5 className='text-xl '>{filteredCount} Properties Found</h5>
+                                    <h5 className='text-xl '>{flugzeuge.length} Properties Found</h5>
                                     <p className='flex text-gray dark:text-gray gap-2 items-center'>
                                         Sort by
                                         <span>
@@ -196,8 +167,12 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                                     {/*{(sortOrder ? sortedProperties : properties).map((data: any, index: any) => (
                                         <PropertyCard key={index} property={data} viewMode={viewMode} />
                                     ))}*/}
-                                    {Flugzeuge.map((data: any, index: any) => (
-                                        <FlugzeugCard key={index} property={data} viewMode={viewMode} />
+                                    {flugzeuge.map((flugzeug, index) => (
+                                        <FlugzeugCard
+                                            key={flugzeug.id ?? index}
+                                            property={flugzeug}
+                                            viewMode={viewMode}
+                                        />
                                     ))}
                                 </div>
                                 :

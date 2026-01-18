@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Loader from "../shared/Loader";
+import { FlugzeugFormData } from "@/app/types/property/flugzeug";
 
 type FlugzeugFormProps = {
   mode: "create" | "edit";
@@ -10,19 +11,7 @@ type FlugzeugFormProps = {
   onSuccess?: () => void;
 };
 
-export type FlugzeugFormData = {
-  kennzeichen: string;
-  baujahr: number | "";
-  bild: File | null;
 
-  flugzeugtyp: string;
-  flugzeuggroesse: string;
-
-  flugstunden: number | "";
-  flugkilometer: number | "";
-  treibstoffverbrauch: number | "";
-  frachtkapazitaet: number | "";
-};
 
 const flugzeugKonfig = {
   flugzeugtypen: ["SEP", "MEP", "Helikopter", "Turboprop", "Jet"],

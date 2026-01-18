@@ -1,23 +1,15 @@
 export type Stellplatz = {
-    id: string,
-    status: string,
-    image: string,
-    flugzeugtyp: string,
-    abmessung:{
-        spannweite: number,
-        laenge: number,
-        hoehe: number
-    }
-    wetterschutz: boolean,
-
-  flugfeld: boolean,
-
-  zugang24h: boolean,
-
-  wachschutz: false,
-  einlagerung:{
-    preis: number,
-    einheit: string
-  },
-  ort: string
+  id: string;
+  kennzeichen: string;
+  besonderheit: string | null;
+  standort: string;
+  availability: boolean;
+  bild: string | null;
+  flugzeugtyp: string | null;
+  flugzeuggroesse: string | null;
+  services: {
+    bezeichnung: string;
+    preis: number;
+    einheit: string;
+  }[];
 };

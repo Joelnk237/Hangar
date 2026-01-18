@@ -3,14 +3,57 @@ import React from "react";
 import Link from "next/link";
 import "../../../../style/index.css";
 import { Eye, Edit, Trash2 } from "lucide-react";
-import { propertyData } from "@/app/types/property/propertyData";
+import { Flugzeug } from "@/app/types/property/flugzeug";
 
 interface PropertyCardProps {
-  property: propertyData;
+  property: Flugzeug;
   viewMode?: string;
 }
 
-const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {  
+const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
+  
+  
+  const handleDelete = async (e: React.MouseEvent) => {
+  e.preventDefault();
+
+  if (property.status) {
+    alert("Dieses Flugzeug ist aktuell einem Stellplatz zugeordnet und kann nicht gelöscht werden.");
+    return;
+  }
+
+  const confirmed = confirm(
+    "Möchten Sie dieses Flugzeug wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(
+      `http://localhost:8888/api/flugzeuge/${property.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Löschen fehlgeschlagen");
+    }
+
+    alert("Flugzeug erfolgreich gelöscht");
+
+    //  reload
+    window.location.reload();
+
+  } catch (err: any) {
+    alert(err.message || "Fehler beim Löschen");
+  }
+};
+
   
   return (
     <div
@@ -18,19 +61,21 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
       className={`bg-white shadow-property dark:bg-darklight rounded-lg overflow-hidden`}
       data-aos="fade-up"
     >
-      <Link href={`/properties/properties-list/${property.slug}`} className={`group ${viewMode=="list" && 'flex' }`}>
+      <Link href={``} className={`group ${viewMode=="list" && 'flex' }`}>
         <div className={`relative ${viewMode=="list" && 'w-[30%]'}`}>
           <div className={`imageContainer h-[250px] w-full ${viewMode =="list" && 'h-full md:h-52'}`}>
             <Image
-              src={property?.property_img}
-              alt={`Image of ${property.property_title}`}
+              src={property.bild
+          ? `http://localhost:8888${property.bild}`
+          : "/images/properties/stellplatz-placeholder.jpg"}
+              alt={`Image of ${property.kennzeichen}`}
               width={400}
               height={250}
               className="w-full h-full object-cover group-hover:scale-125 duration-500"
             />
           </div>
           <p className="absolute top-[10px] left-[10px] py-1 px-4 bg-white rounded-md text-primary items-center">
-            {property.tag} {/* METTRE LE TAG */}
+            {property.status ? `belegt`: `noch nicht belegt`} {/* METTRE LE TAG */}
           </p>
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -49,16 +94,16 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
             
             <div>
               <p className="text-base text-gray">
-                {property.property_title}
+                {property.flugzeugtyp}
               </p>
             </div>
 
             <div className="flex justify-between items-center pb-4">
               <div className="font-bold text-2xl group-hover:text-primary text-midnight_text dark:text-white">
-                {property.property_price}
+                {property.kennzeichen}
               </div>
               <div className="text-xs bg-[#DAE7FF] dark:bg-white text-midnight_text dark:text-primary py-1 px-2 rounded-lg font-bold">
-                {property.location}
+                {property.flugzeuggroesse}
               </div>
             </div>
           </div>
@@ -80,6 +125,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
           </button>
 
           <button
+            onClick={handleDelete}
             className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
             title="löschen"
           >

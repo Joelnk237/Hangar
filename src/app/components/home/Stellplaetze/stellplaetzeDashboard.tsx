@@ -7,101 +7,20 @@ import PropertyCard from '../property-list/property-card';
 import StellplatzCard from '../actors/StellplatzCard';
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Stellplatz } from "@/app/types/property/stellplatz";
+import { Loader } from 'lucide-react';
 
 export default function stellplaetzeDashboard({ category }: { category?: string }) {
-    const [price, setPrice] = useState(50);
-    const [price1, setPrice1] = useState(50);
+    const [stellplaetze, setStellplaetze] = useState<Stellplatz[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const { properties, updateFilter, filters } = useContext(PropertyContext)!;
     const [sortOrder, setSortOrder] = useState("none");
     const [isOffCanvasOpen, setIsOffCanvasOpen] = useState(false);
     const [searchData, setSearchData] = useState<any>([]);
 
-    const stellplaetze = [
-    {
-        id: "SP-001",
-        status: "frei",
-        image: "/images/properties/stellplatz1.jpg",
-        flugzeugtyp: "Cessna 172",
-        abmessung: {
-        spannweite: 11,
-        laenge: 8,
-        hoehe: 3,
-        },
-        wetterschutz: true,
-        flugfeld: true,
-        zugang24h: true,
-        wachschutz: true,
-        einlagerung: {
-        preis: 45,
-        einheit: "pro Tag",
-        },
-        ort: "EDDF – Frankfurt",
-    },
-
-    {
-        id: "SP-002",
-        status: "besetzt",
-        image: "/images/properties/stellplatz2.jpg",
-        flugzeugtyp: "Piper PA-28",
-        abmessung: {
-        spannweite: 11,
-        laenge: 7.5,
-        hoehe: 3,
-        },
-        wetterschutz: true,
-        flugfeld: false,
-        zugang24h: false,
-        wachschutz: true,
-        einlagerung: {
-        preis: 1200,
-        einheit: "pro Monat",
-        },
-        ort: "EDDM – München",
-    },
-
-    {
-        id: "SP-003",
-        status: "frei",
-        image: "/images/properties/stellplatz3.jpg",
-        flugzeugtyp: "Beechcraft Bonanza",
-        abmessung: {
-        spannweite: 10.2,
-        laenge: 8.3,
-        hoehe: 2.6,
-        },
-        wetterschutz: true,
-        flugfeld: true,
-        zugang24h: true,
-        wachschutz: false,
-        einlagerung: {
-        preis: 60,
-        einheit: "pro Tag",
-        },
-        ort: "EDDH – Hamburg",
-    },
-
-    {
-        id: "SP-004",
-        status: "reserviert",
-        image: "/images/properties/stellplatz4.jpg",
-        flugzeugtyp: "Diamond DA40",
-        abmessung: {
-        spannweite: 11.9,
-        laenge: 8.1,
-        hoehe: 2.4,
-        },
-        wetterschutz: false,
-        flugfeld: true,
-        zugang24h: false,
-        wachschutz: false,
-        einlagerung: {
-        preis: 950,
-        einheit: "pro Monat",
-        },
-        ort: "EDDS – Stuttgart",
-    },
-    ];
+    
 
 
 
@@ -120,6 +39,38 @@ export default function stellplaetzeDashboard({ category }: { category?: string 
 
         fetchData()
     }, [])
+
+    useEffect(() => {
+  const fetchStellplaetze = async () => {
+    try {
+      setLoading(true);
+
+      const token = localStorage.getItem("token"); // ou ton auth store
+
+      const res = await fetch("http://localhost:8888/api/stellplaetze", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error("Erreur lors du chargement des stellplaetze");
+      }
+
+      const data: Stellplatz[] = await res.json();
+      setStellplaetze(data);
+
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchStellplaetze();
+}, []);
+
 
     
 
@@ -149,6 +100,10 @@ export default function stellplaetzeDashboard({ category }: { category?: string 
     const filteredCount = sortedProperties.length;
     const router = useRouter();
 
+    if (loading) {
+        return <Loader/>
+    }
+
     return (
         <>
             
@@ -164,7 +119,7 @@ export default function stellplaetzeDashboard({ category }: { category?: string 
                         <div className='col-span-12 lg:col-span-12'>
                             <div className="flex lg:flex-nowrap flex-wrap lg:gap-0 gap-6 w-full justify-between items-center pb-8">
                                 <div className="flex w-full justify-between px-4 flex-1">
-                                    <h5 className='text-xl '>{filteredCount} Properties Found</h5>
+                                    <h5 className='text-xl '>{stellplaetze.length} Place Found</h5>
                                     <p className='flex text-gray dark:text-gray gap-2 items-center'>
                                         Sort by
                                         <span>
@@ -219,9 +174,15 @@ export default function stellplaetzeDashboard({ category }: { category?: string 
                                     {/*{(sortOrder ? sortedProperties : properties).map((data: any, index: any) => (
                                         <PropertyCard key={index} property={data} viewMode={viewMode} />
                                     ))}*/}
-                                    {stellplaetze.map((data: any, index: any) => (
-                                        <StellplatzCard key={index} stellplatz={data} viewMode={viewMode} showActions={true}/>
+                                   {stellplaetze.map((stellplatz) => (
+                                        <StellplatzCard
+                                            key={stellplatz.id}
+                                            stellplatz={stellplatz}
+                                            viewMode={viewMode}
+                                            showActions={true}
+                                        />
                                     ))}
+
                                 </div>
                                 :
                                 <div className='flex flex-col gap-5 items-center justify-center pt-20'>

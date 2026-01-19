@@ -67,29 +67,7 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
     
 
 
-   const normalize = (str: string) =>
-        str.toLowerCase().replace(/s$/, '');
 
-    const filteredProperties = category
-        ? properties.filter((data: any) =>
-            normalize(data.category) === normalize(category)
-        )
-        : properties;
-
-    // Sort logic
-    const sortedProperties = [...filteredProperties].sort((a, b) => {
-        const titleA = a.property_title?.toLowerCase() || "";
-        const titleB = b.property_title?.toLowerCase() || "";
-
-        if (sortOrder === "asc") {
-            return titleA.localeCompare(titleB);
-        } else if (sortOrder === "desc") {
-            return titleB.localeCompare(titleA);
-        }
-        return 0; // no sort
-    });
-
-    const filteredCount = sortedProperties.length;
     const router = useRouter();
 
     return (
@@ -107,7 +85,7 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                         <div className='col-span-12 lg:col-span-12'>
                             <div className="flex lg:flex-nowrap flex-wrap lg:gap-0 gap-6 w-full justify-between items-center pb-8">
                                 <div className="flex w-full justify-between px-4 flex-1">
-                                    <h5 className='text-xl '>{filteredCount} Properties Found</h5>
+                                    <h5 className='text-xl '>{Flugzeuge.length} Properties Found</h5>
                                     <p className='flex text-gray dark:text-gray gap-2 items-center'>
                                         Sort by
                                         <span>
@@ -154,7 +132,7 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                                     </button>
                                 </div>
                             </div>
-                            {filteredProperties.length > 0 ?
+                            {Flugzeuge.length > 0 ?
                                 <div className={` ${viewMode === 'grid' ? 'grid sm:grid-cols-2' : 'flex flex-col'} sm:grid-cols-2 lg:grid-cols-2 gap-4 px-4`}>
                                     {/*{(sortOrder ? sortedProperties : properties).map((data: any, index: any) => (
                                         <PropertyCard key={index} property={data} viewMode={viewMode} />

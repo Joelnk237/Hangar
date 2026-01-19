@@ -34,8 +34,8 @@ const headerDataHAnbieter = [
 ];
 const headerDataFBesitzer = [
   { label: "Home", href: "/" },
-  { label: "Stellplatzsuche", href: "#" },
-  { label: "Flugzeuge", href: "#" },
+  { label: "Stellplatzsuche", href: "/properties/properties-list" },
+  { label: "Flugzeuge", href: "/flugzeuge" },
   { label: "Anfragen", href: "#" },
   { label: "Angebote", href: "#" },
   { label: "Nachrichten", href: "/nachrichten" }, 

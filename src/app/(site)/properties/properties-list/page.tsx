@@ -11,7 +11,7 @@ const Page = ({ searchParams }: any) => {
 
   return (
     <>
-      <AdvanceSearch category={category} />
+      <AdvanceSearch />
     </>
   );
 };

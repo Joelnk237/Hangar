@@ -38,6 +38,7 @@ export type Services = {
 
 export type StellplatzInfosProps = {
  // stellplatz: {
+    id: string,
     anbieterName: string;
     ort: string;
     availability: string;

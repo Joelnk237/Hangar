@@ -1,6 +1,7 @@
 package hangarByThm.TeamC.HangarByTHM;
 
 import io.vertx.core.Future;
+import io.vertx.core.MultiMap;
 import io.vertx.core.VerticleBase;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpMethod;
@@ -15,6 +16,7 @@ import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.JWTAuthHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.pgclient.PgBuilder;
@@ -151,8 +153,8 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::deleteFlugzeugHandler);
 
-    router.get("/api/flugzeuge/:id")
-      .handler(this::getFlugzeugInfosHandler);
+    //router.get("/api/flugzeuge/:id")
+      //.handler(this::getFlugzeugInfosHandler);
 
     router.get("/api/flugzeuge")
       .handler(jwtAuthHandler)
@@ -186,6 +188,13 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::getMyStellplaetzeHandler);
+
+    router.get("/api/search/stellplaetze/options")
+      .handler(this::searchStellplaetzeHandler);
+
+    router.get("/api/stellplaetze/:id/details")
+      .handler(this::getStellplatzByIdHandler);
+
 
 
 
@@ -1136,7 +1145,7 @@ public class MainVerticle extends VerticleBase {
     });
   }
 
-
+//eigene angebotene Stellplätze abrufen
   private void getMyStellplaetzeHandler(RoutingContext ctx) {
 
     UUID hangaranbieterId = ctx.get("anbieterId");
@@ -1232,6 +1241,229 @@ public class MainVerticle extends VerticleBase {
         ctx.fail(500, err);
       });
   }
+
+  private void searchStellplaetzeHandler(RoutingContext ctx) {
+    System.out.println("Suchen demarre");
+    String keyword = ctx.request().getParam("keyword");
+    String ort = ctx.request().getParam("location");
+    String flugzeugtyp = ctx.request().getParam("flugzeugtyp");
+    String flugzeuggroesse = ctx.request().getParam("flugzeuggroesse");
+    System.out.println("Suchen "+ ort);
+
+
+    StringBuilder sql = new StringBuilder("""
+    SELECT
+      s.id,
+      s.kennzeichen,
+      s.besonderheit,
+      s.standort,
+      s.availability,
+      s.bild,
+      s.flugzeugtyp,
+      s.flugzeuggroesse,
+      h.hangar_merkmale, h.firmenname,
+      ARRAY_REMOVE(ARRAY_AGG(DISTINCT sv.bezeichnung), NULL) AS services
+      FROM stellplatz s
+      JOIN hangaranbieter h ON h.id = s.hangaranbieter_id
+      LEFT JOIN service_zu_stellplatz szs ON szs.stellplatz_id = s.id
+      LEFT JOIN service sv ON sv.id = szs.service_id
+    WHERE s.availability = true
+  """);
+
+    List<Object> params = new java.util.ArrayList<>();
+    int i = 1;
+
+    if (keyword != null && !keyword.isBlank()) {
+      sql.append(" AND (LOWER(s.besonderheit) LIKE $").append(i)
+        .append(" OR LOWER(s.kennzeichen) LIKE $").append(i).append(")");
+      params.add("%" + keyword.toLowerCase() + "%");
+      i++;
+    }
+
+    if (ort != null && !ort.isBlank()) {
+      sql.append(" AND LOWER(s.standort) = $").append(i);
+      params.add(ort.toLowerCase());
+      i++;
+    }
+
+    if (flugzeugtyp != null && !flugzeugtyp.isBlank()) {
+      sql.append(" AND s.flugzeugtyp = $").append(i).append("::flugzeugtyp_enum");
+      params.add(flugzeugtyp);
+      i++;
+    }
+
+    if (flugzeuggroesse != null && !flugzeuggroesse.isBlank()) {
+      sql.append(" AND s.flugzeuggroesse = $").append(i).append("::flugzeuggroesse_enum");
+      params.add(flugzeuggroesse);
+      i++;
+    }
+    sql.append(" GROUP BY s.id, h.id");
+
+
+
+    client.preparedQuery(sql.toString())
+      .execute(Tuple.tuple(params))
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler bei der Stellplatz-Suche");
+      })
+      .onSuccess(rows -> {
+
+        JsonArray result = new JsonArray();
+
+        rows.forEach(row ->
+          result.add(buildStellplatzSearchJson(row))
+        );
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .setStatusCode(200)
+          .end(result.encode());
+      });
+  }
+  private JsonArray extractEnabledMerkmale(JsonObject merkmale) {
+    JsonArray result = new JsonArray();
+
+    for (String key : merkmale.fieldNames()) {
+      JsonObject obj = merkmale.getJsonObject(key);
+      if (obj != null && obj.getBoolean("enabled", false)) {
+        result.add(key);
+      }
+    }
+    return result;
+  }
+
+  private JsonObject buildStellplatzSearchJson(io.vertx.sqlclient.Row row) {
+    String merkmaleStr = row.getString("hangar_merkmale");
+    JsonObject merkmale = merkmaleStr != null
+      ? new JsonObject(merkmaleStr)
+      : new JsonObject();
+
+    String[] servicesArr = row.getArrayOfStrings("services");
+    JsonArray services = new JsonArray();
+    if (servicesArr != null) {
+      for (String s : servicesArr) {
+        services.add(s);
+      }
+    }
+
+    return new JsonObject()
+      .put("id", row.getUUID("id").toString())
+      .put("kennzeichen", row.getString("kennzeichen"))
+      .put("besonderheit", row.getString("besonderheit"))
+      .put("ort", row.getString("standort"))
+      .put("availability", row.getBoolean("availability"))
+      .put("einstellbedingung", extractEnabledMerkmale(merkmale))
+      .put("bild", row.getString("bild"))
+      .put("flugzeugtyp", row.getString("flugzeugtyp"))
+      .put("hangaranbieter", row.getString("firmenname"))
+      .put("services", services)
+      .put("flugzeuggroesse", row.getString("flugzeuggroesse"));
+  }
+
+  // Stellplatz-Details
+  private void getStellplatzByIdHandler(RoutingContext ctx) {
+
+    String idParam = ctx.pathParam("id");
+    UUID stellplatzId;
+
+    try {
+      stellplatzId = UUID.fromString(idParam);
+    } catch (IllegalArgumentException e) {
+      ctx.response().setStatusCode(400).end("Ungültige Stellplatz-ID");
+      return;
+    }
+
+    String sql = """
+    SELECT
+      s.id,
+      s.standort,
+      s.availability,
+      s.bild,
+      s.besonderheit,
+      s.flugzeugtyp,
+      s.flugzeuggroesse,
+      h.firmenname,
+      h.hangar_merkmale,
+      COALESCE(
+        jsonb_object_agg(
+          sv.bezeichnung,
+          jsonb_build_object(
+            'price', asv.preis,
+            'unit', asv.einheit
+          )
+        ) FILTER (WHERE sv.bezeichnung IS NOT NULL),
+        '{}'::jsonb
+      ) AS services
+    FROM stellplatz s
+    JOIN hangaranbieter h ON h.id = s.hangaranbieter_id
+    LEFT JOIN service_zu_stellplatz szs ON szs.stellplatz_id = s.id
+    LEFT JOIN service sv ON sv.id = szs.service_id
+    LEFT JOIN angebotene_services asv
+      ON asv.service_id = sv.id
+     AND asv.hangaranbieter_id = h.id
+    WHERE s.id = $1
+    GROUP BY s.id, h.id
+  """;
+
+    client
+      .preparedQuery(sql)
+      .execute(Tuple.of(stellplatzId))
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response().setStatusCode(500).end("DB-Fehler");
+      })
+      .onSuccess(rows -> {
+
+        if (!rows.iterator().hasNext()) {
+          ctx.response().setStatusCode(404).end("Stellplatz nicht gefunden");
+          return;
+        }
+
+        Row row = rows.iterator().next();
+
+        JsonObject response = buildStellplatzDetailJson(row);
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .setStatusCode(200)
+          .end(response.encode());
+      });
+  }
+  private JsonObject buildStellplatzDetailJson(Row row) {
+
+    // JSONB → String → JsonObject
+    //JsonObject merkmale = new JsonObject(row.getString("hangar_merkmale"));
+    //JsonObject services = new JsonObject(row.getString("services"));
+
+    Object merkmaleObj = row.getValue("hangar_merkmale");
+    Object servicesObj = row.getValue("services");
+
+    JsonObject merkmale = (merkmaleObj instanceof JsonObject)
+      ? (JsonObject) merkmaleObj
+      : new JsonObject(merkmaleObj.toString());
+
+    JsonObject services = (servicesObj instanceof JsonObject)
+      ? (JsonObject) servicesObj
+      : new JsonObject(servicesObj.toString());
+
+    return new JsonObject()
+      .put("anbieterName", row.getString("firmenname"))
+      .put("ort", row.getString("standort"))
+      .put("availability", row.getBoolean("availability"))
+      .put("bild", row.getString("bild"))
+      .put("flugzeugtyp", row.getString("flugzeugtyp"))
+      .put("flugzeuggroesse", row.getString("flugzeuggroesse"))
+      .put("besonderheiten", row.getString("besonderheit"))
+      .put("merkmale", merkmale)
+      .put("services", services);
+  }
+
+
+
+
 
 
 

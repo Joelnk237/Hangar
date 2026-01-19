@@ -67,7 +67,7 @@ public class Flugzeug {
   public void setBild(String bild) {
     this.bild = bild;
   }
-  public String getStatus() {
+  public boolean getStatus() {
     return status;
   }
 

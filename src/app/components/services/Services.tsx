@@ -177,6 +177,11 @@ const Services = ({ allServices }: ServicesProps) => {
           })}
         </div>
       </fieldset>
+      <div className="flex justify-end gap-4">
+        <button className="px-5 py-2 rounded bg-blue-600 text-white">
+          Add Service
+        </button>
+      </div>
 
       {/* ================= ZUSATZSERVICES ================= */}
       <fieldset className="border rounded-lg p-6">
@@ -285,11 +290,8 @@ const Services = ({ allServices }: ServicesProps) => {
 
       {/* ================= ACTIONS ================= */}
       <div className="flex justify-end gap-4">
-        <button className="px-5 py-2 rounded bg-blue-600 text-white">
-          Add Service
-        </button>
         <button className="px-5 py-2 rounded bg-green-600 text-white">
-          new Zusatzservice erfassen
+          Add Zusatzservice
         </button>
       </div>
     </div></div></div></div>

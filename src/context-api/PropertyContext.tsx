@@ -1,7 +1,8 @@
 'use client';
 
-import { Filters } from '@/app/types/property/filtertypes';
+import { StellplatzFilters } from '@/app/types/property/filtertypes';
 import { propertyData } from '@/app/types/property/propertyData';
+import { stellplatzDataSearch } from '@/app/types/property/stellplatzData';
 import React, {
   createContext,
   useState,
@@ -12,64 +13,30 @@ import React, {
 } from 'react';
 
 interface PropertyContextType {
-  properties: propertyData[];
-  setProperties: Dispatch<SetStateAction<propertyData[]>>;
-  filters: Filters;
+  properties: stellplatzDataSearch[];
+  setProperties: Dispatch<SetStateAction<stellplatzDataSearch[]>>;
+  filters: StellplatzFilters;
   setFilters: any;
-  updateFilter: (key: keyof Filters, value: string) => void;
+  updateFilter: (key: keyof StellplatzFilters, value: string) => void;
 }
 
 export const PropertyContext = createContext<PropertyContextType | undefined>(undefined);
 
 export const AppContextProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [allProperties, setAllProperties] = useState<propertyData[]>([]);
-  const [properties, setProperties] = useState<propertyData[]>([]);
-  const [filters, setFilters] = useState<Filters>({
+
+  const [properties, setProperties] = useState<stellplatzDataSearch[]>([]);
+  const [filters, setFilters] = useState<StellplatzFilters>({
     keyword: '',
     location: '',
-    region: '',
-    status: '',
-    category: '',
-    beds: '',
-    baths: '',
-    garages: '',
-    tag: '',
+    flugzeugtyp: '',
+    flugzeuggroesse: '',
   });
 
-  // Fetch properties from the API route
-  useEffect(() => {
-    const fetchProperties = async () => {
-      try {
-        const res = await fetch('/api/propertydata');
-        const data: propertyData[] = await res.json();
-        setAllProperties(data);
-        setProperties(data); // set initially unfiltered list
-      } catch (error) {
-        console.error('Failed to fetch properties:', error);
-      }
-    };
+  
 
-    fetchProperties();
-  }, []);
 
-  // Apply filters whenever `filters` or `allProperties` change
-  useEffect(() => {
-    const filteredProperties = allProperties.filter((property) => {
-      return (
-        (!filters.keyword || property.property_title.toLowerCase().includes(filters.keyword.toLowerCase())) &&
-        (!filters.location || property.location.toLowerCase() === filters.location.toLowerCase()) &&
-        (!filters.tag || property.tag.toLowerCase() === filters.tag.toLowerCase()) &&
-        (!filters.status || property.status === filters.status) &&
-        (!filters.category || property.category.toLowerCase() === filters.category.toLowerCase()) &&
-        (!filters.beds || property.beds === Number(filters.beds)) &&
-        (!filters.garages || property.garages === Number(filters.garages))
-      );
-    });
 
-    setProperties(filteredProperties);
-  }, [filters, allProperties]);
-
-  const updateFilter = (key: keyof Filters, value: string) => {
+  const updateFilter = (key: keyof StellplatzFilters, value: string) => {
     setFilters((prevFilters) => ({
       ...prevFilters,
       [key]: value,

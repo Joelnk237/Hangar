@@ -7,27 +7,9 @@ import { PropertyContext } from "@/context-api/PropertyContext";
 
 const Hero = () => {
   const router = useRouter();
-  const [propertiesData, setPropertiesData] = useState<any[]>([])
   const { properties, updateFilter } = useContext(PropertyContext)!;
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [location, setLocation] = useState("");
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch('/api/propertydata')
-        if (!res.ok) throw new Error('Failed to fetch')
-
-        const data = await res.json()
-        setPropertiesData(data || [])
-      } catch (error) {
-        console.error('Error fetching services:', error)
-      }
-    }
-
-    fetchData()
-  }, [])
 
 
   const handleSearchSell = () => {
@@ -37,16 +19,12 @@ const Hero = () => {
     }
     setError('');
     updateFilter('location', location);
-    updateFilter('tag', 'sell');
-    router.push(`/properties/properties-list`);
+    //updateFilter('tag', 'sell');
+    router.push(`/properties/properties-list/${encodeURIComponent(location)}`);
   };
 
-  const suggestions = Array.from(new Set(propertiesData.map((item) => item.location)));
 
-  const handleSelect = (value: any) => {
-    setLocation(value);
-    setShowSuggestions(false);
-  };
+  
 
   return (
     <section className="relative pt-48 pb-14 dark:bg-darklight bg-no-repeat bg-gradient-to-b from-white from-10% dark:from-darkmode to-herobg to-90% dark:to-darklight overflow-x-hidden">
@@ -79,25 +57,10 @@ const Hero = () => {
                           placeholder="Search Location"
                           value={location}
                           onChange={(e) => setLocation(e.target.value)}
-                          onFocus={() => setShowSuggestions(true)}
-                          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                           className="py-5 pr-3 pl-14 w-full rounded-lg text-black border border-border dark:text-white dark:border-dark_border focus:border-primary dark:focus:border-primary focus-visible:outline-none dark:bg-[#0c121e]"
                         />
 
-                        {showSuggestions && (
-                          <div className="absolute left-0 right-0 top-full -mt-2 bg-white dark:bg-semidark border border-border rounded-md z-10 max-h-[130px] overflow-y-auto">
-                            <ul className="flex flex-col gap-2 py-4 px-8">
-                              {suggestions.map((item, index) => (
-                                <li
-                                  key={index}
-                                  onClick={() => handleSelect(item)}
-                                >
-                                  <p className="cursor-pointer text-midnight_text dark:text-white text-lg hover:text-primary dark:hover:text-primary">{item}</p>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
+              
 
                       </div>
                     </div>

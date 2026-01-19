@@ -10,4 +10,11 @@ export interface Filters {
     garages: any;
     key?: any;
   }
+export interface StellplatzFilters {
+    keyword: any;
+    location: any;
+    flugzeugtyp: any;
+    flugzeuggroesse: any;
+    key?: any;
+  }
   

@@ -18,19 +18,20 @@ const StellplatzCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => 
       className={`bg-white shadow-property dark:bg-darklight rounded-lg overflow-hidden`}
       data-aos="fade-up"
     >
-      <Link href={``} className={`group ${viewMode=="list" && 'flex' }`}>
+      <Link href={`/stellplaetze/${property.id}`} className={`group ${viewMode=="list" && 'flex' }`}>
         <div className={`relative ${viewMode=="list" && 'w-[30%]'}`}>
           <div className={`imageContainer h-[250px] w-full ${viewMode =="list" && 'h-full md:h-52'}`}>
             <Image
-              src={property?.image}
-              alt={`Image of ${property.image}`}
+              src={property?.bild? `http://localhost:8888${property?.bild}`
+      : "/images/properties/stellplatz-placeholder.jpg"}
+              alt={`Image of ${property.bild}`}
               width={400}
               height={250}
               className="w-full h-full object-cover group-hover:scale-125 duration-500"
             />
           </div>
           <p className="absolute top-[10px] left-[10px] py-1 px-4 bg-white rounded-md text-primary items-center">
-            verfügbar ab: {property.verfügbarkeit} {/* METTRE LE TAG */}
+            verfügbar ab: sofort {/* METTRE LE TAG */}
           </p>
         </div>
         <div className={`p-5 sm:p-8 dark:text-white text-opacity-50 ${viewMode=="list" && 'w-[70%] flex flex-col justify-center'}`}>

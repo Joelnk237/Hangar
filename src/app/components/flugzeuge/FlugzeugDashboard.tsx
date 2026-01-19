@@ -81,8 +81,8 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
 
     // Sort logic
     const sortedProperties = [...filteredProperties].sort((a, b) => {
-        const titleA = a.property_title?.toLowerCase() || "";
-        const titleB = b.property_title?.toLowerCase() || "";
+        const titleA = a.hangaranbieter?.toLowerCase() || "";
+        const titleB = b.hangaranbieter?.toLowerCase() || "";
 
         if (sortOrder === "asc") {
             return titleA.localeCompare(titleB);

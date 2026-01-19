@@ -4,6 +4,8 @@ import Link from "next/link";
 import "../../../../style/index.css";
 import { Eye, Edit, Trash2 } from "lucide-react";
 import { Flugzeug } from "@/app/types/property/flugzeug";
+import { useRouter } from "next/navigation";
+
 
 interface PropertyCardProps {
   property: Flugzeug;
@@ -11,6 +13,7 @@ interface PropertyCardProps {
 }
 
 const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
+  const router = useRouter();
   
   
   const handleDelete = async (e: React.MouseEvent) => {
@@ -52,6 +55,10 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
   } catch (err: any) {
     alert(err.message || "Fehler beim Löschen");
   }
+};
+const handleEdit = (e: React.MouseEvent) => {
+  e.preventDefault(); // empêche le Link parent
+  router.push(`/flugzeuge/edit/${property.id}`);
 };
 
   

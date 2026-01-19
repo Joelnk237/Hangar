@@ -2,39 +2,9 @@
 
 import Image from "next/image";
 
-type Merkmale = {
-  [key: string]: {
-    enabled: boolean;
-    [subKey: string]: boolean;
-  };
-};
+import { StellplatzInfosProps } from "@/app/types/property/stellplatzData";
 
-type Services = {
-  [key: string]: {
-    price: number;
-    unit: string;
-  };
-};
-
-type StellplatzInfosProps = {
-  stellplatz: {
-    anbieterName: string;
-    ort: string;
-    availability: string;
-    bild: string | null;
-
-    flugzeugtyp: string;
-    flugzeuggroesse: string;
-
-    merkmale: Merkmale;
-    services: Services;
-    besonderheiten: string;
-  };
-};
-
-const StellplatzInfos = ({
-  stellplatz
-}: StellplatzInfosProps) => {
+const StellplatzInfos = ({ stellplatz }: { stellplatz: StellplatzInfosProps }) => {
   return (
     <div className="pt-20 pb-32 bg-light dark:bg-darkmode">
       <div className="pt-11 flex justify-center items-center text-center ">
@@ -45,7 +15,8 @@ const StellplatzInfos = ({
       <div className="relative w-full h-64">
         {stellplatz.bild ? (
           <Image
-            src={stellplatz.bild}
+            src={stellplatz.bild ? `http://localhost:8888${stellplatz.bild}`
+      : "/images/properties/stellplatz-placeholder.jpg"}
             alt="Stellplatz Bild"
             fill
             className="object-cover"
@@ -69,7 +40,7 @@ const StellplatzInfos = ({
 
         {/* Merkmale */}
         <div>
-          <h3 className="font-semibold mb-2">Hangar-Merkmale:</h3>
+          <h3 className="font-semibold mb-2">Einstellbedingungen:</h3>
           <ul className="list-disc list-inside space-y-1">
             {Object.entries(stellplatz.merkmale)
               .filter(([_, m]) => m.enabled)

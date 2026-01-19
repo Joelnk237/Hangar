@@ -5,61 +5,55 @@ import Image from 'next/image';
 import HeroSub from '../../shared/hero-sub';
 import { PropertyContext } from '@/context-api/PropertyContext';
 import PropertyCard from '../../home/property-list/stellplatz-card';
+import { stellplatzDataSearch } from '@/app/types/property/stellplatzData';
+import { Loader } from 'lucide-react';
+type Props = {
+  initialLocation?: string;
+};
 
-export default function AdvanceSearch({ category }: { category?: string }) {
-    const [price, setPrice] = useState(50);
-    const [price1, setPrice1] = useState(50);
+export default function AdvanceSearch({ initialLocation }: Props) {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const { properties, updateFilter, filters } = useContext(PropertyContext)!;
     const [sortOrder, setSortOrder] = useState("none");
     const [isOffCanvasOpen, setIsOffCanvasOpen] = useState(false);
     const [searchData, setSearchData] = useState<any>([]);
 
-    const stellplaetze = [
-    {
-        id: "SP-001",
-        verfügbarkeit: "2026-05-02",
-        hangaranbieter: "Hangar GmbH",
-        image: "/images/properties/stellplatz1.jpg",
-        flugzeugtyp: "Jet",
-        flugzeuggroesse: "L",
-        services: ["Einlagerung", "Tanken"],
-        ort: "EDDF – Frankfurt",
-    },
+    const [stellplaetze, setStellplaetze] = useState<stellplatzDataSearch[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    {
-        id: "SP-002",
-        hangaranbieter: "Hangar GmbH",
-        verfügbarkeit: "2026-05-02",
-        image: "/images/properties/stellplatz2.jpg",
-        flugzeugtyp: "Helicopter",
-        flugzeuggroesse: "S",
-        services: ["Einlagerung", "Tanken"],
-        ort: "EDDM – München",
-    },
+    useEffect(() => {
+  if (initialLocation) {
+    updateFilter('location', initialLocation);
+  }
+}, [initialLocation]);
 
-    {
-        id: "SP-003",
-        hangaranbieter: "Hangar GmbH",
-        verfügbarkeit: "2026-05-02",
-        image: "/images/properties/stellplatz3.jpg",
-        flugzeugtyp: "Cessna 172",
-        flugzeuggroesse: "M",
-        services: ["Einlagerung", "Tanken"],
-        ort: "EDDH – Hamburg",
-    },
 
-    {
-        id: "SP-004",
-        hangaranbieter: "Hangar GmbH",
-        verfügbarkeit: "2026-05-02",
-        image: "/images/properties/stellplatz4.jpg",
-        flugzeugtyp: "Cessna 172",
-        flugzeuggroesse: "XL",
-        services: ["Einlagerung", "Tanken"],
-        ort: "EDDS – Stuttgart",
-    },
-    ];
+ /* ---------------- FETCH DATA ---------------- */
+  useEffect(() => {
+    const fetchStellplaetze = async () => {
+      try {
+        const params = new URLSearchParams(
+          Object.entries(filters).filter(([_, v]) => v)
+        );
+        console.log(`voici les params: ${params}`);
+
+        const res = await fetch(
+          `http://localhost:8888/api/search/stellplaetze/options?${params.toString()}`
+        );
+
+        if (!res.ok) throw new Error("Fetch fehlgeschlagen");
+
+        const data = await res.json();
+        setStellplaetze(data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStellplaetze();
+  }, [filters]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -77,16 +71,6 @@ export default function AdvanceSearch({ category }: { category?: string }) {
         fetchData()
     }, [])
 
-
-
-    const handlePriceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setPrice(Number(event.target.value));
-    };
-
-    const handlePriceChange1 = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setPrice1(Number(event.target.value));
-    };
-
     const handleSelectChange = (key: any, value: any) => {
 
         updateFilter(key, value);
@@ -96,34 +80,10 @@ export default function AdvanceSearch({ category }: { category?: string }) {
         setIsOffCanvasOpen(!isOffCanvasOpen);
     };
 
-    const normalize = (str: string) =>
-        str.toLowerCase().replace(/s$/, '');
-
-    const filteredProperties = category
-        ? properties.filter((data: any) =>
-            normalize(data.category) === normalize(category)
-        )
-        : properties;
-
-    // Sort logic
-    const sortedProperties = [...filteredProperties].sort((a, b) => {
-        const titleA = a.property_title?.toLowerCase() || "";
-        const titleB = b.property_title?.toLowerCase() || "";
-
-        if (sortOrder === "asc") {
-            return titleA.localeCompare(titleB);
-        } else if (sortOrder === "desc") {
-            return titleB.localeCompare(titleA);
-        }
-        return 0; // no sort
-    });
-
-    const filteredCount = sortedProperties.length;
-
     return (
         <>
             <HeroSub
-                title={(filters?.category) ? filters?.category: "Stellplatzsuche"}
+                title={"Stellplatzsuche"}
                 description="Optimiere deine Suche! Wähle deine Kriterien aus und finde genau das, was du suchst."
             />
             <section className='dark:bg-darkmode px-4'>
@@ -173,22 +133,6 @@ export default function AdvanceSearch({ category }: { category?: string }) {
                                         </select>
                                     </div>
 
-                                    {/* Example for range input */}
-                                    <div>
-                                        <p className='text-gray dark:text-gray font-medium'>
-                                            Distance: {price} miles
-                                        </p>
-                                        <input
-                                            type="range"
-                                            min="50"
-                                            max="750"
-                                            step=""
-                                            value={price}
-                                            onChange={handlePriceChange}
-                                            className="w-full h-0.5 bg-lightborder dark:bg-dark_border mt-2 rounded-lg appearance-none cursor-pointer"
-                                        />
-                                    </div>
-
                                     {/* Map through selects (regions, statuses, etc.) */}
                                     {Object.entries(searchData).map(([key, options]) => (
                                         key !== 'keywords' && key !== 'locations' && (
@@ -209,22 +153,6 @@ export default function AdvanceSearch({ category }: { category?: string }) {
                                             </div>
                                         )
                                     ))}
-
-                                    {/* Example for another range input */}
-                                    <div>
-                                        <p className='text-gray dark:text-gray'>
-                                            From ${price1} to $8000
-                                        </p>
-                                        <input
-                                            type="range"
-                                            min="50"
-                                            max="8000"
-                                            step=""
-                                            value={price1}
-                                            onChange={handlePriceChange1}
-                                            className="w-full h-0.5 bg-lightborder dark:bg-dark_border mt-2 rounded-lg appearance-none cursor-pointer"
-                                        />
-                                    </div>
 
                                     {/* Example button */}
                                     <div>
@@ -262,7 +190,7 @@ export default function AdvanceSearch({ category }: { category?: string }) {
                                                 placeholder={option.placeholder}
                                                 type='text'
                                                 className='py-3 w-full pl-3 pr-9 border border-border dark:bg-semidark dark:border-dark_border dark:focus:border-primary  !rounded-lg focus-visible:outline-none focus:border-primary'
-                                                onChange={(e) => updateFilter('keyword', e.target.value)}
+                                                onChange={(e) => updateFilter('location', e.target.value)}
                                         />
                                             ))}
                                         
@@ -300,7 +228,7 @@ export default function AdvanceSearch({ category }: { category?: string }) {
                         <div className='col-span-12 lg:col-span-8'>
                             <div className="flex lg:flex-nowrap flex-wrap lg:gap-0 gap-6 w-full justify-between items-center pb-8">
                                 <div className="flex w-full justify-between px-4 flex-1">
-                                    <h5 className='text-xl '>{filteredCount} Properties Found</h5>
+                                    <h5 className='text-xl '>{stellplaetze.length} Places Found</h5>
                                     <p className='flex text-gray dark:text-gray gap-2 items-center'>
                                         Sort by
                                         <span>
@@ -347,7 +275,9 @@ export default function AdvanceSearch({ category }: { category?: string }) {
                                     </button>
                                 </div>
                             </div>
-                            {filteredProperties.length > 0 ?
+                            {loading ? (
+                                <Loader/>
+                            ) :stellplaetze.length > 0 ?
                                 <div className={` ${viewMode === 'grid' ? 'grid sm:grid-cols-2' : 'flex flex-col'} gap-6 px-4`}>
                                     {/*{(sortOrder ? sortedProperties : properties).map((data: any, index: any) => (  */}
                                     {stellplaetze.map((data: any, index: any) => ( 

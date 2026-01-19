@@ -2,6 +2,8 @@ package hangarByThm.TeamC.HangarByTHM;
 
 import io.vertx.core.Future;
 import io.vertx.core.MultiMap;
+import java.time.LocalDate;
+
 import io.vertx.core.VerticleBase;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpMethod;
@@ -194,6 +196,13 @@ public class MainVerticle extends VerticleBase {
 
     router.get("/api/stellplaetze/:id/details")
       .handler(this::getStellplatzByIdHandler);
+
+    //Stellplatz reservieren
+    router.post("/api/reservierungen")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::makeReservierung);
+
 
 
 
@@ -1450,6 +1459,7 @@ public class MainVerticle extends VerticleBase {
       : new JsonObject(servicesObj.toString());
 
     return new JsonObject()
+      .put("id", row.getUUID("id"))
       .put("anbieterName", row.getString("firmenname"))
       .put("ort", row.getString("standort"))
       .put("availability", row.getBoolean("availability"))
@@ -1460,6 +1470,129 @@ public class MainVerticle extends VerticleBase {
       .put("merkmale", merkmale)
       .put("services", services);
   }
+
+  private void makeReservierung(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+
+    JsonObject body = ctx.body().asJsonObject();
+    if (body == null) {
+      ctx.response().setStatusCode(400).end("Body fehlt");
+      return;
+    }
+
+    UUID stellplatzId;
+    UUID flugzeugId;
+
+    LocalDate von;
+    LocalDate bis;
+
+    try {
+      von = LocalDate.parse(body.getString("von"));
+      bis = LocalDate.parse(body.getString("bis"));
+    } catch (Exception e) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("Ungültige Daten  (YYYY-MM-DD)");
+      return;
+    }
+
+    try {
+      stellplatzId = UUID.fromString(body.getString("stellplatzId"));
+      flugzeugId = UUID.fromString(body.getString("flugzeugId"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige Daten");
+      return;
+    }
+
+    if (von == null || bis == null) {
+      ctx.response().setStatusCode(400).end("Zeitraum fehlt");
+      return;
+    }
+
+  /* --------------------------------------------------
+     Prüfen: gehört das Flugzeug dem Benutzer?
+     -------------------------------------------------- */
+    String checkFlugzeugSql = """
+    SELECT id
+    FROM flugzeug
+    WHERE id = $1
+      AND flugzeugbesitzer_id = $2
+  """;
+
+    client.preparedQuery(checkFlugzeugSql)
+      .execute(Tuple.of(flugzeugId, flugzeugbesitzerId))
+      .compose(rows -> {
+        if (!rows.iterator().hasNext()) {
+          return Future.failedFuture("FLUGZEUG_NOT_OWNED");
+        }
+
+      /* --------------------------------------------------
+        Prüfen: ist Stellplatz im Zeitraum frei?
+         -------------------------------------------------- */
+        String checkAvailabilitySql = """
+        SELECT 1
+        FROM flugzeug_zu_stellplatz
+        WHERE stellplatz_id = $1
+          AND NOT (
+            bis < $2 OR von > $3
+          )
+      """;
+
+        return client.preparedQuery(checkAvailabilitySql)
+          .execute(Tuple.of(stellplatzId, von, bis));
+      })
+      .compose(rows -> {
+        if (rows.iterator().hasNext()) {
+          return Future.failedFuture("STELLPLATZ_BELEGT");
+        }
+
+      /* --------------------------------------------------
+         Reservierung anlegen
+         -------------------------------------------------- */
+        String insertSql = """
+        INSERT INTO flugzeug_zu_stellplatz
+        (stellplatz_id, flugzeug_id, von, bis)
+        VALUES ($1, $2, $3, $4)
+      """;
+
+        return client.preparedQuery(insertSql)
+          .execute(Tuple.of(stellplatzId, flugzeugId, von, bis));
+      })
+      /*.compose(v -> {
+
+
+        String updateFlugzeugSql = """
+        UPDATE flugzeug
+        SET belegt = true
+        WHERE id = $1
+      """;
+
+        return client.preparedQuery(updateFlugzeugSql)
+          .execute(Tuple.of(flugzeugId));
+      })*/
+      .onSuccess(v ->
+        ctx.response()
+          .setStatusCode(201)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Reservierung erfolgreich erstellt")
+            .encode())
+      )
+      .onFailure(err -> {
+        switch (err.getMessage()) {
+          case "FLUGZEUG_NOT_OWNED" ->
+            ctx.response().setStatusCode(403).end("Flugzeug gehört nicht dem Benutzer");
+          case "STELLPLATZ_BELEGT" ->
+            ctx.response().setStatusCode(409).end("Stellplatz im Zeitraum belegt");
+          default -> {
+            err.printStackTrace();
+            ctx.response().setStatusCode(500).end("Serverfehler");
+          }
+        }
+      });
+  }
+
 
 
 

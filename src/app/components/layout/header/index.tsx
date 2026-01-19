@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 //import { signOut, useSession } from "next-auth/react";
@@ -11,11 +11,13 @@ import MobileHeaderLink from "./navigation/MobileHeaderLink";
 
 const Header: React.FC = () => {
   const pathUrl = usePathname();
+  const router = useRouter();
   //const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
 
   const [data, setData] = useState<any[]>([]);
   const [user, setUser] = useState<{ id: any, rolle: any, email:any } | null>(null);
+  const [userLoaded, setUserLoaded] = useState(false); // selber hinzugefügt
   const [navbarOpen, setNavbarOpen] = useState(false);
   const [sticky, setSticky] = useState(false);
   const [isSignInOpen, setIsSignInOpen] = useState(false);
@@ -25,6 +27,8 @@ const Header: React.FC = () => {
   const signInRef = useRef<HTMLDivElement>(null);
   const signUpRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+
 
   // Function to handle scroll to set sticky class
   const handleScroll = () => {
@@ -54,6 +58,14 @@ const Header: React.FC = () => {
   }, [navbarOpen, isSignInOpen, isSignUpOpen]);
 
   useEffect(() => {
+  const storedUser = localStorage.getItem("user");
+  if (storedUser) {
+    setUser(JSON.parse(storedUser));
+  }
+  setUserLoaded(true);
+}, []);
+
+  useEffect(() => {
     window.addEventListener("scroll", handleScroll);
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
@@ -72,14 +84,23 @@ const Header: React.FC = () => {
         if (!res.ok) throw new Error('Failed to fetch')
 
         const data = await res.json()
-        setData(data?.headerDataHAnbieter || [])
+        //setData(data?.headerDataHAnbieter || [])
+        if (user?.rolle === "hangaranbieter") {
+          setData(data.headerDataHAnbieter);
+        } else if (user?.rolle === "flugzeugbesitzer") {
+          setData(data.headerDataFBesitzer);
+        } else {
+          setData([]);
+        }
       } catch (error) {
         console.error('Error fetching services:', error)
       }
     }
 
-    fetchData()
-  }, [])
+    if (userLoaded) {
+    fetchData();
+  }
+  }, [user, userLoaded])
 
   console.log("data",data);
   // HIER DIE NAVBAR ELEMENTE HINZUFÜGEN !!!!
@@ -89,6 +110,7 @@ const Header: React.FC = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("token");
     setUser(null);
+    router.push('/');
   };
 
   return (
@@ -97,11 +119,12 @@ const Header: React.FC = () => {
     >
       <div className="container mx-auto lg:max-w-screen-xl md:max-w-screen-md flex items-center justify-between px-4 py-6">
         <Logo />
-        <nav className="hidden lg:flex flex-grow items-center justify-center space-x-6">
+
+        {userLoaded && user?.email && (<nav className="hidden lg:flex flex-grow items-center justify-center space-x-6">
           {data.map((item:any, index:any) => (
             <HeaderLink key={index} item={item} />
           ))}
-        </nav> 
+        </nav>)} 
         <div className="flex items-center space-x-4">
           <button
             aria-label="Toggle theme"

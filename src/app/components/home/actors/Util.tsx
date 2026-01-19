@@ -73,29 +73,6 @@ export default function AdvanceSearch({ category }: { category?: string }) {
     
 
 
-   const normalize = (str: string) =>
-        str.toLowerCase().replace(/s$/, '');
-
-    const filteredProperties = category
-        ? properties.filter((data: any) =>
-            normalize(data.category) === normalize(category)
-        )
-        : properties;
-
-    // Sort logic
-    const sortedProperties = [...filteredProperties].sort((a, b) => {
-        const titleA = a.property_title?.toLowerCase() || "";
-        const titleB = b.property_title?.toLowerCase() || "";
-
-        if (sortOrder === "asc") {
-            return titleA.localeCompare(titleB);
-        } else if (sortOrder === "desc") {
-            return titleB.localeCompare(titleA);
-        }
-        return 0; // no sort
-    });
-
-    const filteredCount = sortedProperties.length;
 
     if (loading) {
         return <Loader/>
@@ -161,7 +138,7 @@ export default function AdvanceSearch({ category }: { category?: string }) {
                                     </button>
                                 </div>
                             </div>
-                            {filteredProperties.length > 0 ?
+                            {stellplaetze.length > 0 ?
                                 <div className={` ${viewMode === 'grid' ? 'grid sm:grid-cols-2' : 'flex flex-col'} gap-6 px-4`}>
                                     {/*{(sortOrder ? sortedProperties : properties).map((data: any, index: any) => (
                                         <PropertyCard key={index} property={data} viewMode={viewMode} />

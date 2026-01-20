@@ -137,10 +137,6 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)   // 🔥 JWT Handling
       .handler(this::getHomePage);
 
-    /*router.post("/api/fleuzeuge")
-      .handler(jwtAuthHandler)   // 🔥 JWT Handling
-      .handler(this::createFlugzeug);*/
-
     router.post("/api/flugzeuge")
       .handler(jwtAuthHandler)  // JWT Handling
       .handler(this::createFlugzeugHandler);
@@ -209,9 +205,15 @@ public class MainVerticle extends VerticleBase {
       .handler(this::hangaranbieterContextHandler)
       .handler(this::getBelegteStellplaetzeHandler);
 
+    //fahrbereitschaft einstellen
     router.put("/api/zustand/fahrbereitschaft")
       .handler(jwtAuthHandler)
       .handler(this::updateFahrbereitschaftHandler);
+
+    router.get("/api/flugzeuge/:id/details")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::getFlugzeugDetailsHandler);
 
 
 
@@ -521,8 +523,6 @@ public class MainVerticle extends VerticleBase {
   }
 
 
-
-
   private <T> Future<Void> insertSequentially(
     Iterable<T> items,
     java.util.function.Function<T, Future<Void>> inserter
@@ -612,8 +612,6 @@ public class MainVerticle extends VerticleBase {
 
       });
   }
-
-
 
 
   private void modifyFlugzeugHandler(RoutingContext ctx) {
@@ -1752,6 +1750,181 @@ public class MainVerticle extends VerticleBase {
           .end("Serverfehler");
       });
   }
+
+// FlugzeugInfos abrufen
+  private void getFlugzeugDetailsHandler(RoutingContext ctx){
+    UUID flugzeugId;
+    try {
+      flugzeugId = UUID.fromString(ctx.pathParam("id"));
+    } catch (IllegalArgumentException e) {
+      ctx.response().setStatusCode(400).end("Ungültige Flugzeug-ID");
+      return;
+    }
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+    String sqlCheck = """
+  SELECT *
+  FROM flugzeug
+  WHERE id = $1
+    AND flugzeugbesitzer_id = $2
+""";
+
+    client.preparedQuery(sqlCheck)
+      .execute(Tuple.of(flugzeugId, flugzeugbesitzerId))
+      .compose(rows -> {
+
+        if (!rows.iterator().hasNext()) {
+          return Future.failedFuture("FORBIDDEN");
+        }
+
+        Row row = rows.iterator().next();
+        Flugzeug flugzeug = Flugzeug.fromRow(row);
+
+        JsonObject result = new JsonObject();
+        result.put("flugzeug", flugzeug.toJson());
+
+        return loadHangarInfos(flugzeugId, result);
+      })
+      .onSuccess(result ->
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .setStatusCode(200)
+          .end(result.encode())
+      )
+      .onFailure(err -> {
+        if ("FORBIDDEN".equals(err.getMessage())) {
+          ctx.response().setStatusCode(403).end("Kein Zugriff auf dieses Flugzeug");
+        } else {
+          err.printStackTrace();
+          ctx.response().setStatusCode(500).end("Serverfehler");
+        }
+      });
+
+
+  }
+
+  private Future<JsonObject> loadHangarInfos(UUID flugzeugId, JsonObject result) {
+
+    String sql = """
+    SELECT
+      s.id AS stellplatz_id,
+      s.kennzeichen AS stellplatz_kennzeichen,
+      s.besonderheit,
+      s.standort,
+      h.id AS hangaranbieter_id,
+      h.firmenname,
+      fs.von,
+      fs.bis
+    FROM flugzeug_zu_stellplatz fs
+    JOIN stellplatz s ON s.id = fs.stellplatz_id
+    JOIN hangaranbieter h ON h.id = s.hangaranbieter_id
+    WHERE fs.flugzeug_id = $1
+  """;
+
+    return client.preparedQuery(sql)
+      .execute(Tuple.of(flugzeugId))
+      .compose(rows -> {
+
+        if (!rows.iterator().hasNext()) {
+          result.put("hangar", null);
+          return loadZustand(flugzeugId, null, result);
+        }
+
+        Row row = rows.iterator().next();
+        UUID stellplatzId = row.getUUID("stellplatz_id");
+
+        JsonObject hangar = new JsonObject()
+          .put("stellplatz_id", stellplatzId.toString())
+          .put("stellplatzKennzeichen", row.getString("stellplatz_kennzeichen"))
+          .put("besonderheit", row.getString("besonderheit"))
+          .put("hangaranbieterId", row.getUUID("hangaranbieter_id").toString())
+          .put("firmenname", row.getString("firmenname"))
+          .put("ort", row.getString("standort"))
+          .put("von", row.getLocalDate("von") != null ? row.getLocalDate("von").toString() : null)
+          .put("bis", row.getLocalDate("bis") != null ? row.getLocalDate("bis").toString() : null)
+          .put("services", new JsonArray())
+          .put("uebergabetermin",null)
+          .put("rueckgabetermin",null);
+
+        result.put("hangar", hangar);
+
+        // Termin Tabelle noch nicht vorhanden:
+        // SPÄTER: loadTermin(stellplatzId, flugzeugId)
+
+        return loadServices(stellplatzId, result)
+          .compose(v -> loadZustand(flugzeugId, stellplatzId, result));
+      });
+  }
+
+  private Future<Void> loadServices(UUID stellplatzId, JsonObject result) {
+
+    String sql = """
+    SELECT s.bezeichnung, a.preis, a.einheit
+    FROM service_zu_stellplatz szs
+    JOIN service s ON s.id = szs.service_id
+    JOIN angebotene_services a ON a.service_id = s.id
+    WHERE szs.stellplatz_id = $1
+  """;
+
+    return client.preparedQuery(sql)
+      .execute(Tuple.of(stellplatzId))
+      .onSuccess(rows -> {
+        JsonArray services = new JsonArray();
+
+        rows.forEach(row -> {
+          services.add(new JsonObject()
+            .put("bezeichnung", row.getString("bezeichnung"))
+            .put("preis", row.getBigDecimal("preis") != null
+              ? row.getBigDecimal("preis").doubleValue()
+              : null)
+            .put("einheit", row.getString("einheit")));
+        });
+
+        result.getJsonObject("hangar").put("services", services);
+      })
+      .mapEmpty();
+  }
+
+  private Future<JsonObject> loadZustand(
+    UUID flugzeugId,
+    UUID stellplatzId,
+    JsonObject result
+  ) {
+
+    if (stellplatzId == null) {
+      result.put("zustand", null);
+      return Future.succeededFuture(result);
+    }
+
+    String sql = """
+    SELECT fahrbereitschaft, beschreibung, wartung
+    FROM zustand
+    WHERE flugzeug_id = $1
+      AND stellplatz_id = $2
+  """;
+
+    return client.preparedQuery(sql)
+      .execute(Tuple.of(flugzeugId, stellplatzId))
+      .map(rows -> {
+
+        JsonObject zustand = null;
+
+        if (rows.iterator().hasNext()) {
+          Row r = rows.iterator().next();
+          zustand = new JsonObject()
+            .put("fahrbereitschaft", r.getString("fahrbereitschaft"))
+            .put("beschreibung", r.getString("beschreibung"))
+            .put("wartungszustand", r.getString("wartung"));
+        }
+
+        result.put("zustand", zustand);
+        return result;
+      });
+  }
+
+
+
+
 
 
 }

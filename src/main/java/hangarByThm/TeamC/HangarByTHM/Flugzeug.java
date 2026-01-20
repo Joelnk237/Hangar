@@ -2,6 +2,7 @@ package hangarByThm.TeamC.HangarByTHM;
 
 import io.vertx.core.json.JsonObject;
 import java.util.UUID;
+import io.vertx.sqlclient.Row;
 
 public class Flugzeug {
 
@@ -11,6 +12,7 @@ public class Flugzeug {
   private Flugzeuggroesse flugzeuggroesse;
   private String kennzeichen;
   private String bild;
+  private Abmasse abmasse;
 
   private Integer flugstunden;
   private Integer flugkilometer;
@@ -106,7 +108,12 @@ public class Flugzeug {
   public void setFrachtkapazitaet(Integer frachtkapazitaet) {
     this.frachtkapazitaet = frachtkapazitaet;
   }
-
+  public Abmasse getAbmasse() {
+    return abmasse;
+  }
+  public void setAbmasse(Abmasse abmasse) {
+    this.abmasse = abmasse;
+  }
   /* ===================== JSON ===================== */
 
   public JsonObject toJson() {
@@ -121,7 +128,8 @@ public class Flugzeug {
       .put("flugstunden", flugstunden)
       .put("flugkilometer", flugkilometer)
       .put("treibstoffverbrauch", treibstoffverbrauch)
-      .put("frachtkapazitaet", frachtkapazitaet);
+      .put("frachtkapazitaet", frachtkapazitaet)
+      .put("abmasse", abmasse != null ? abmasse.toJSON() : null);
 
   }
 
@@ -146,6 +154,65 @@ public class Flugzeug {
     f.setFlugkilometer(Integer.parseInt(json.getString("flugkilometer")));
     f.setTreibstoffverbrauch(Double.parseDouble(json.getString("treibstoffverbrauch")));
     f.setFrachtkapazitaet(Integer.parseInt(json.getString("frachtkapazitaet")));
+
+    return f;
+  }
+
+
+  public static Flugzeug fromRow(Row row) {
+    Flugzeug f = new Flugzeug();
+
+    // UUIDs
+    UUID id = row.getUUID("id");
+    if (id != null) {
+      f.setId(id);
+    }
+
+    UUID besitzerId = row.getUUID("flugzeugbesitzer_id");
+    if (besitzerId != null) {
+      f.setFlugzeugbesitzerId(besitzerId);
+    }
+
+    // Boolean
+    Boolean belegt = row.getBoolean("belegt");
+    if (belegt != null) {
+      f.setStatus(belegt);
+    }
+
+    // Enums (PostgreSQL enum → String → Java enum)
+    String typ = row.getString("flugzeugtyp");
+    if (typ != null) {
+      f.setFlugzeugtyp(Flugzeugtyp.valueOf(typ));
+    }
+
+    String groesse = row.getString("flugzeuggroesse");
+    if (groesse != null) {
+      f.setFlugzeuggroesse(Flugzeuggroesse.valueOf(groesse));
+    }
+
+    // Strings
+    f.setKennzeichen(row.getString("kennzeichen"));
+    f.setBild(row.getString("bild"));
+
+    // Numeriques
+    f.setFlugkilometer(row.getInteger("flugkilometer"));
+    f.setTreibstoffverbrauch(
+      row.getBigDecimal("treibstoffverbrauch") != null
+        ? row.getBigDecimal("treibstoffverbrauch").doubleValue()
+        : null
+    );
+    f.setFrachtkapazitaet(row.getInteger("frachtkapazitaet"));
+
+    // JSONB → Abmasse
+    JsonObject abmasseJson = row.getJsonObject("abmasse");
+    if (abmasseJson != null) {
+      Abmasse abmasse = new Abmasse(
+        Double.parseDouble(abmasseJson.getString("fluegelspannweite")),
+        Double.parseDouble(abmasseJson.getString("laenge")),
+        Double.parseDouble(abmasseJson.getString("hoehe"))
+      );
+      f.setAbmasse(abmasse);
+    }
 
     return f;
   }

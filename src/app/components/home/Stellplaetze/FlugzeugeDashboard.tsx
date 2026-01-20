@@ -4,72 +4,90 @@ import { Icon } from "@iconify/react";
 import Image from 'next/image';
 import { PropertyContext } from '@/context-api/PropertyContext';
 import FlugzeugCard from './HFlugzeugCard';
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { flugzeugData } from "@/app/types/property/propertyData";
+import Loader from '../../shared/Loader';
 
 export default function FlugzeugDashboard({ category }: { category?: string }) {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const { properties, updateFilter, filters } = useContext(PropertyContext)!;
     const [sortOrder, setSortOrder] = useState("none");
-    const [isOffCanvasOpen, setIsOffCanvasOpen] = useState(false);
-    const [searchData, setSearchData] = useState<any>([]);
-
-    const Flugzeuge = [
-        // Flugzeuge
-        {
-          id: '1',
-          image: "/images/properties/airbus-1.jpg",
-          flugzeugtyp: "Cessna",
-          flugzeuggroesse: "XL",
-          kennzeichen: "D-ABCD",
-          stellplatz: "PLACE 256",
-          rTermin: "2026-12-30",
-        },
-      {
-    id: '2',
-    image: "/images/properties/aircraft-2.jpg",
-    flugzeugtyp: "Cessna",
-    flugzeuggroesse: "XL",
-    kennzeichen: "D-ABCD",
-    stellplatz: "PLACE 256",
-    rTermin: "2026-12-30",
-  },
-  {
-    id: '3',
-    image: "/images/properties/airbus-3.jpg",
-    flugzeugtyp: "Cessna",
-    flugzeuggroesse: "XL",
-    kennzeichen: "D-ABCD",
-    stellplatz: "PLACE 256",
-    rTermin: "2026-12-30",
-  },] ;
-
-
+    const [flugzeuge, setFlugzeuge] = useState<flugzeugData[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showEmptyModal, setShowEmptyModal] = useState(false);
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const res = await fetch('/api/pagedata')
-                if (!res.ok) throw new Error('Failed to fetch')
+  const fetchFlugzeuge = async () => {
+    try {
+      const token = localStorage.getItem("token");
 
-                const data = await res.json()
-                setSearchData(data?.searchOptions || [])
-            } catch (error) {
-                console.error('Error fetching services:', error)
-            }
+      const res = await fetch(
+        "http://localhost:8888/api/hangaranbieter/stellplaetze/manage",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
+      );
 
-        fetchData()
-    }, [])
+      if (!res.ok) {
+        throw new Error("Fehler beim Laden der Flugzeuge");
+      }
+
+      const data: flugzeugData[] = await res.json();
+
+      if (data.length === 0) {
+        setShowEmptyModal(true);
+      } else {
+        setFlugzeuge(data);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchFlugzeuge();
+}, []);
+
+
+
+
+
 
     
 
 
 
-    const router = useRouter();
+
+
+    if (loading) {
+        return (
+            <Loader/>
+        );
+    }
 
     return (
         <>
+        {showEmptyModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="bg-white dark:bg-semidark rounded-lg p-6 max-w-md text-center">
+      <h3 className="text-lg font-semibold mb-3">
+        Keine belegten Stellplätze
+      </h3>
+      <p className="text-gray-600 dark:text-gray-300 mb-6">
+        Aktuell sind keine Flugzeuge vorhanden, die Ihre Stellplätze belegen.
+      </p>
+      <button
+        onClick={() => setShowEmptyModal(false)}
+        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+      >
+        Verstanden
+      </button>
+    </div>
+  </div>
+)}
+
             <div className="pt-20 pb-32 bg-light dark:bg-darkmode">
       <div className="pt-11 flex justify-center items-center text-center ">
        
@@ -83,7 +101,7 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                         <div className='col-span-12 lg:col-span-12'>
                             <div className="flex lg:flex-nowrap flex-wrap lg:gap-0 gap-6 w-full justify-between items-center pb-8">
                                 <div className="flex w-full justify-between px-4 flex-1">
-                                    <h5 className='text-xl '>{Flugzeuge.length} Flugzeuge Found</h5>
+                                    <h5 className='text-xl '>{flugzeuge.length} Flugzeuge gefunden</h5>
                                     <p className='flex text-gray dark:text-gray gap-2 items-center'>
                                         Sort by
                                         <span>
@@ -130,13 +148,17 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                                     </button>
                                 </div>
                             </div>
-                            {Flugzeuge.length > 0 ?
+                            {flugzeuge.length > 0 ?
                                 <div className={` ${viewMode === 'grid' ? 'grid sm:grid-cols-2' : 'flex flex-col'} sm:grid-cols-2 lg:grid-cols-2 gap-4 px-4`}>
                                     {/*{(sortOrder ? sortedProperties : properties).map((data: any, index: any) => (
                                         <PropertyCard key={index} property={data} viewMode={viewMode} />
                                     ))}*/}
-                                    {Flugzeuge.map((data: any, index: any) => (
-                                        <FlugzeugCard key={index} property={data} viewMode={viewMode} />
+                                    {flugzeuge.map((data, index) => (
+                                        <FlugzeugCard
+                                            key={data.flugzeug.id}
+                                            property={data}
+                                            viewMode={viewMode}
+                                        />
                                     ))}
                                 </div>
                                 :

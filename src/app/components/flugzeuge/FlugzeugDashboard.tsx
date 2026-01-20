@@ -51,48 +51,12 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
 
 
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const res = await fetch('/api/pagedata')
-                if (!res.ok) throw new Error('Failed to fetch')
-
-                const data = await res.json()
-                setSearchData(data?.searchOptions || [])
-            } catch (error) {
-                console.error('Error fetching services:', error)
-            }
-        }
-
-        fetchData()
-    }, [])
+    
 
     
 
 
-   const normalize = (str: string) =>
-        str.toLowerCase().replace(/s$/, '');
-
-    const filteredProperties = category
-        ? properties.filter((data: any) =>
-            normalize(data.category) === normalize(category)
-        )
-        : properties;
-
-    // Sort logic
-    const sortedProperties = [...filteredProperties].sort((a, b) => {
-        const titleA = a.hangaranbieter?.toLowerCase() || "";
-        const titleB = b.hangaranbieter?.toLowerCase() || "";
-
-        if (sortOrder === "asc") {
-            return titleA.localeCompare(titleB);
-        } else if (sortOrder === "desc") {
-            return titleB.localeCompare(titleA);
-        }
-        return 0; // no sort
-    });
-
-    const filteredCount = sortedProperties.length;
+   
     const router = useRouter();
 
     if (loading) {
@@ -162,7 +126,7 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                                     </button>
                                 </div>
                             </div>
-                            {filteredProperties.length > 0 ?
+                            {flugzeuge.length > 0 ?
                                 <div className={` ${viewMode === 'grid' ? 'grid sm:grid-cols-2' : 'flex flex-col'} sm:grid-cols-2 lg:grid-cols-3 gap-6 px-4`}>
                                     {/*{(sortOrder ? sortedProperties : properties).map((data: any, index: any) => (
                                         <PropertyCard key={index} property={data} viewMode={viewMode} />

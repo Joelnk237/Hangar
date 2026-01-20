@@ -1,8 +1,8 @@
 import Image from "next/image";
 import React from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import "../../../style/index.css";
-import { Eye} from "lucide-react";
 import { flugzeugData } from "@/app/types/property/propertyData";
 
 interface PropertyCardProps {
@@ -11,14 +11,152 @@ interface PropertyCardProps {
 }
 
 const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {  
-  
+
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+
+  const [fahrbereitschaft, setFahrbereitschaft] = React.useState("");
+  const [beschreibung, setBeschreibung] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const router= useRouter();
+
+  const openModal = () => {
+  setIsModalOpen(true);
+  };
+
+const closeModal = () => {
+  setIsModalOpen(false);
+  setFahrbereitschaft("");
+  setBeschreibung("");
+};
+
+
+const handleConfirm = async () => {
+  if (!fahrbereitschaft.trim()) {
+    return;
+  }
+try {
+  setLoading(true);
+  setError(null);
+
+  const token = localStorage.getItem("token");
+    // fetch POST →  backend
+    const res = await fetch(
+      "http://localhost:8888/api/zustand/fahrbereitschaft",
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          flugzeugId: property.flugzeug.id,
+          stellplatzId: property.stellplatz.id,
+          fahrbereitschaft,
+          beschreibung,
+        }),
+      }
+    );
+
+    /* ===== ERROR HANDLING ===== */
+    if (res.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      router.push("/signin");
+      return;
+    }
+
+    if (res.status === 403) {
+      throw new Error(
+        "Sie haben keine Berechtigung, diese Aktion auszuführen."
+      );
+    }
+
+    //Succes
+
+    closeModal();
+    setFahrbereitschaft("");
+    setBeschreibung("");
+  } catch (err: any) {
+    setError(err.message ?? "Fehler");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+
+
   return (
+    <>
+    {isModalOpen && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="bg-white dark:bg-semidark rounded-lg w-full max-w-lg p-6">
+      
+      <h3 className="text-lg font-semibold mb-6">
+        Fahrbereitschaft einstellen
+      </h3>
+
+      {/* Fahrbereitschaft */}
+      <div className="mb-4">
+        <label className="block font-medium mb-2">
+          Fahrbereitschaft <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          required
+          value={fahrbereitschaft}
+          onChange={(e) => setFahrbereitschaft(e.target.value)}
+          className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      {/* Beschreibung */}
+      <div className="mb-6">
+        <label className="block font-medium mb-2">
+          Beschreibung
+        </label>
+        <textarea
+          rows={4}
+          value={beschreibung}
+          onChange={(e) => setBeschreibung(e.target.value)}
+          className="w-full border border-gray-300 rounded-md p-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      {/* Abbrechen */}
+      <div className="flex justify-end gap-4">
+        <button
+          onClick={closeModal}
+          className="px-4 py-2 rounded-md border border-gray-300 hover:bg-gray-100"
+        >
+          Abbrechen
+        </button>
+
+        <button
+          onClick={handleConfirm}
+          disabled={!fahrbereitschaft.trim()}
+          className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          Bestätigen
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+{error && (
+  <div className="mb-4 rounded-md bg-red-100 text-red-700 px-3 py-2">
+    {error}
+  </div>
+)}
     <div
       key={property.flugzeug.id}
       className={`bg-white shadow-property dark:bg-darklight rounded-lg overflow-hidden`}
       data-aos="fade-up"
     >
-      <Link href={``} className={`group ${viewMode=="list" && 'flex' }`}>
+      <div className={`group ${viewMode=="list" && 'flex' }`}>
         <div className={`relative ${viewMode=="list" && 'w-[30%]'}`}>
           <div className={`imageContainer h-[250px] w-full ${viewMode =="list" && 'h-full md:h-52'}`}>
             <Image
@@ -62,6 +200,10 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
               
 
           <button
+            onClick={(e) => {
+              e.preventDefault();
+              openModal();
+            }}
             className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             Fahrbereitschaft einstellen
@@ -75,8 +217,9 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
            
           </div>
         </div>
-      </Link>
+      </div>
     </div>
+    </>
   );
 };
 

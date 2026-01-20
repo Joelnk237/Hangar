@@ -203,10 +203,16 @@ public class MainVerticle extends VerticleBase {
       .handler(this::flugzeugbesitzerContextHandler)
       .handler(this::makeReservierung);
 
+    // Belegte Flugzeuge
     router.get("/api/hangaranbieter/stellplaetze/manage")
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::getBelegteStellplaetzeHandler);
+
+    router.put("/api/zustand/fahrbereitschaft")
+      .handler(jwtAuthHandler)
+      .handler(this::updateFahrbereitschaftHandler);
+
 
 
 
@@ -1559,7 +1565,7 @@ public class MainVerticle extends VerticleBase {
         return client.preparedQuery(insertSql)
           .execute(Tuple.of(stellplatzId, flugzeugId, von, bis));
       })
-      /*.compose(v -> {
+      .compose(v -> {
 
 
         String updateFlugzeugSql = """
@@ -1570,7 +1576,18 @@ public class MainVerticle extends VerticleBase {
 
         return client.preparedQuery(updateFlugzeugSql)
           .execute(Tuple.of(flugzeugId));
-      })*/
+      })
+      .compose(v -> {
+
+
+        String createZustand = """
+        INSERT INTO zustand (flugzeug_id, stellplatz_id)
+                     VALUES ($1, $2);
+      """;
+
+        return client.preparedQuery(createZustand)
+          .execute(Tuple.of(flugzeugId,stellplatzId));
+      })
       .onSuccess(v ->
         ctx.response()
           .setStatusCode(201)
@@ -1593,6 +1610,7 @@ public class MainVerticle extends VerticleBase {
       });
   }
 
+  //belegte Flugzeuge
   private void getBelegteStellplaetzeHandler(RoutingContext ctx) {
 
     UUID anbieterId = ctx.get("anbieterId");
@@ -1663,5 +1681,77 @@ public class MainVerticle extends VerticleBase {
           .end(result.encode());
       });
   }
+
+  //Fahrbereitschaft aktualisieren
+  private void updateFahrbereitschaftHandler(RoutingContext ctx) {
+
+    JsonObject body = ctx.body().asJsonObject();
+
+    if (body == null) {
+      ctx.response().setStatusCode(400).end("Body fehlt");
+      return;
+    }
+
+    UUID flugzeugId;
+    UUID stellplatzId;
+
+    try {
+      flugzeugId = UUID.fromString(body.getString("flugzeugId"));
+      stellplatzId = UUID.fromString(body.getString("stellplatzId"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige IDs");
+      return;
+    }
+
+    String fahrbereitschaft = body.getString("fahrbereitschaft");
+    String beschreibung = body.getString("beschreibung");
+
+    if (fahrbereitschaft == null || fahrbereitschaft.isBlank()) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("Fahrbereitschaft ist erforderlich");
+      return;
+    }
+
+    String sql = """
+    UPDATE zustand
+    SET
+      fahrbereitschaft = $1,
+      beschreibung = COALESCE($2, beschreibung)
+    WHERE flugzeug_id = $3
+      AND stellplatz_id = $4
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(
+        fahrbereitschaft,
+        beschreibung,
+        flugzeugId,
+        stellplatzId
+      ))
+      .onSuccess(res -> {
+
+        if (res.rowCount() == 0) {
+          ctx.response()
+            .setStatusCode(404)
+            .end("Zustand nicht gefunden");
+          return;
+        }
+
+        ctx.response()
+          .setStatusCode(200)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Fahrbereitschaft erfolgreich aktualisiert")
+            .encode());
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Serverfehler");
+      });
+  }
+
 
 }

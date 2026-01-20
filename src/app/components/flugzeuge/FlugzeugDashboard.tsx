@@ -112,7 +112,7 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                         <div className='col-span-12 lg:col-span-12'>
                             <div className="flex lg:flex-nowrap flex-wrap lg:gap-0 gap-6 w-full justify-between items-center pb-8">
                                 <div className="flex w-full justify-between px-4 flex-1">
-                                    <h5 className='text-xl '>{flugzeuge.length} Properties Found</h5>
+                                    <h5 className='text-xl '>{flugzeuge.length} Flugzeuge Found</h5>
                                     <p className='flex text-gray dark:text-gray gap-2 items-center'>
                                         Sort by
                                         <span>

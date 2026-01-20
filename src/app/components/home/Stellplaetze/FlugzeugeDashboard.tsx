@@ -8,8 +8,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function FlugzeugDashboard({ category }: { category?: string }) {
-    const [price, setPrice] = useState(50);
-    const [price1, setPrice1] = useState(50);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const { properties, updateFilter, filters } = useContext(PropertyContext)!;
     const [sortOrder, setSortOrder] = useState("none");
@@ -85,7 +83,7 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                         <div className='col-span-12 lg:col-span-12'>
                             <div className="flex lg:flex-nowrap flex-wrap lg:gap-0 gap-6 w-full justify-between items-center pb-8">
                                 <div className="flex w-full justify-between px-4 flex-1">
-                                    <h5 className='text-xl '>{Flugzeuge.length} Properties Found</h5>
+                                    <h5 className='text-xl '>{Flugzeuge.length} Flugzeuge Found</h5>
                                     <p className='flex text-gray dark:text-gray gap-2 items-center'>
                                         Sort by
                                         <span>

@@ -27,4 +27,6 @@ export type flugzeugData = {
     kennzeichen: string,
     stellplatz: string,
     rTermin: string,
+    von: string, 
+    bis: string
 }

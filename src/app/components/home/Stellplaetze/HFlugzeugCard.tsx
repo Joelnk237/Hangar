@@ -30,7 +30,10 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
             />
           </div>
           <p className="absolute top-[10px] left-[10px] py-1 px-4 bg-white rounded-md text-primary items-center">
-            bis: {property.rTermin} {/* METTRE LE TAG */}
+            von:{property.rTermin} {/* TAG */}
+          </p>
+          <p className="absolute top-[10px] right-[10px] p-2 rounded-lg py-1 px-4 bg-white rounded-md text-primary items-center">
+            bis:{property.rTermin} {/* TAG */}
           </p>
         </div>
         <div className={`p-5 sm:p-8 dark:text-white text-opacity-50 ${viewMode=="list" && 'w-[70%] flex flex-col justify-center'}`}>

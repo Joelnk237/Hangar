@@ -60,6 +60,10 @@ const handleEdit = (e: React.MouseEvent) => {
   e.preventDefault(); // empêche le Link parent
   router.push(`/flugzeuge/edit/${property.id}`);
 };
+const handleConsult = (e: React.MouseEvent) => {
+  e.preventDefault(); // 
+  router.push(`/flugzeuge/info/${property.id}`);
+};
 
   
   return (
@@ -118,6 +122,7 @@ const handleEdit = (e: React.MouseEvent) => {
           <div className="flex gap-2 flex-wrap justify-between">
             
               <button
+              onClick={handleConsult}
             className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
             title="Details ansehen"
           >

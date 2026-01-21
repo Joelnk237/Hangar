@@ -23,3 +23,46 @@ export type FlugzeugFormData = {
   treibstoffverbrauch: number | "";
   frachtkapazitaet: number | "";
 };
+
+export type FlugzeugInfoProps = {
+  flugzeug: {
+    id:string;
+    kennzeichen: string;
+    status:boolean;
+    baujahr: number;
+    flugzeugtyp: string;
+    flugzeuggroesse: string;
+    flugstunden: number;
+    flugkilometer: number;
+    treibstoffverbrauch: number;
+    frachtkapazitaet: number;
+    abmasse: {
+      fluegelspannweite: number;
+      laenge:number;
+      hoehe:number
+    };
+  };
+
+  hangar: {
+    stellplatz_id: string;
+    stellplatzKennzeichen: string;
+    hangaranbieterId: string;
+    hangaranbieter: string;
+    ort: string;
+    services: {
+      bezeichnung:string;
+      preis: number;
+      einheit: string;
+    }[];
+    von: string;
+    bis: string;
+    uebergabetermin: string;
+    rueckgabetermin: string;
+  };
+
+  zustand: {
+    fahrbereitschaft: string;
+    beschreibung:  string;
+    wartungszustand: string;
+  };
+};

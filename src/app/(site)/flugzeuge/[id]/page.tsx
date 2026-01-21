@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import FlugzeugForm from "@/app/components/flugzeuge/FlugzeugForm";
 import { FlugzeugFormData } from "@/app/types/property/flugzeug";
 
+//FLUGZEUGE BEARBEITEN
 export default function EditFlugzeugPage() {
   const { id } = useParams();
   const [data, setData] = useState<FlugzeugFormData & { id: string } | null>(null);

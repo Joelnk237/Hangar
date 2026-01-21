@@ -18,6 +18,7 @@ public class Flugzeug {
   private Integer flugkilometer;
   private Double treibstoffverbrauch;
   private Integer frachtkapazitaet;
+  private Integer baujahr;
   private boolean status;
 
   /* ===================== GETTERS / SETTERS ===================== */
@@ -114,6 +115,13 @@ public class Flugzeug {
   public void setAbmasse(Abmasse abmasse) {
     this.abmasse = abmasse;
   }
+  public Integer getBaujahr() {
+    return baujahr;
+  }
+
+  public void setBaujahr(Integer baujahr) {
+    this.baujahr = baujahr;
+  }
   /* ===================== JSON ===================== */
 
   public JsonObject toJson() {
@@ -123,6 +131,7 @@ public class Flugzeug {
       .put("flugzeugtyp", flugzeugtyp != null ? flugzeugtyp.name() : null)
       .put("flugzeuggroesse", flugzeuggroesse != null ? flugzeuggroesse.name() : null)
       .put("kennzeichen", kennzeichen)
+      .put("baujahr", baujahr)
       .put("bild", bild)
       .put("status", status)
       .put("flugstunden", flugstunden)
@@ -196,6 +205,8 @@ public class Flugzeug {
 
     // Numeriques
     f.setFlugkilometer(row.getInteger("flugkilometer"));
+    f.setFlugstunden(row.getInteger("flugstunden"));
+    f.setBaujahr(row.getInteger("baujahr"));
     f.setTreibstoffverbrauch(
       row.getBigDecimal("treibstoffverbrauch") != null
         ? row.getBigDecimal("treibstoffverbrauch").doubleValue()

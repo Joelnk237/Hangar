@@ -1832,13 +1832,14 @@ public class MainVerticle extends VerticleBase {
 
         Row row = rows.iterator().next();
         UUID stellplatzId = row.getUUID("stellplatz_id");
+        UUID anbieterID = row.getUUID("hangaranbieter_id");
 
         JsonObject hangar = new JsonObject()
           .put("stellplatz_id", stellplatzId.toString())
           .put("stellplatzKennzeichen", row.getString("stellplatz_kennzeichen"))
           .put("besonderheit", row.getString("besonderheit"))
           .put("hangaranbieterId", row.getUUID("hangaranbieter_id").toString())
-          .put("firmenname", row.getString("firmenname"))
+          .put("hangaranbieter", row.getString("firmenname"))
           .put("ort", row.getString("standort"))
           .put("von", row.getLocalDate("von") != null ? row.getLocalDate("von").toString() : null)
           .put("bis", row.getLocalDate("bis") != null ? row.getLocalDate("bis").toString() : null)
@@ -1851,23 +1852,23 @@ public class MainVerticle extends VerticleBase {
         // Termin Tabelle noch nicht vorhanden:
         // SPÄTER: loadTermin(stellplatzId, flugzeugId)
 
-        return loadServices(stellplatzId, result)
+        return loadServices(stellplatzId, anbieterID, result)
           .compose(v -> loadZustand(flugzeugId, stellplatzId, result));
       });
   }
 
-  private Future<Void> loadServices(UUID stellplatzId, JsonObject result) {
+  private Future<Void> loadServices(UUID stellplatzId, UUID anbieterID, JsonObject result) {
 
     String sql = """
     SELECT s.bezeichnung, a.preis, a.einheit
     FROM service_zu_stellplatz szs
     JOIN service s ON s.id = szs.service_id
     JOIN angebotene_services a ON a.service_id = s.id
-    WHERE szs.stellplatz_id = $1
+    WHERE szs.stellplatz_id = $1 AND a.hangaranbieter_id = $2
   """;
 
     return client.preparedQuery(sql)
-      .execute(Tuple.of(stellplatzId))
+      .execute(Tuple.of(stellplatzId, anbieterID))
       .onSuccess(rows -> {
         JsonArray services = new JsonArray();
 

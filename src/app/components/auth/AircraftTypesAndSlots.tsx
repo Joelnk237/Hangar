@@ -31,6 +31,14 @@ const availableTypes: FlugzeugTypEintrag["typ"][] = [
   "Ultraleicht",
 ];
 
+const flugzeugGroessenConfig = {
+    XS: "Abmaße: Flügelspannweite < 10 m | Länge < 6 m | Höhe < 2,5 m",
+    S: "Abmaße: Flügelspannweite 10–15 m | Länge 6–8 m | Höhe 2,5–3,5 m",
+    M: "Abmaße: Flügelspannweite 15–20 m | Länge 8–12 m | Höhe 3,5–5 m",
+    L: "Abmaße: Flügelspannweite 20–25 m | Länge 12–16 m | Höhe 5–7 m",
+    XL: "Abmaße: Flügelspannweite > 25 m | Länge > 16 m | Höhe > 7 m",
+  };
+
 const availableSizes: FlugzeugGroesseEintrag["groesse"][] = ["XS", "S", "M", "L", "XL"];
 
 const AircraftTypesAndSlots = ({ value, onChange }: AircraftTypesAndSlotsProps) => {
@@ -68,8 +76,8 @@ const AircraftTypesAndSlots = ({ value, onChange }: AircraftTypesAndSlotsProps) 
 
   return (
     <div className="mb-8">
-      <h3 className="text-base font-semibold mb-4 text-midnight_text dark:text-white">
-        Spezialisierungen
+      <h3 className="text-base font-bold mb-6 text-midnight_text dark:text-white">
+        Spezialisierungen & Stellplatzanzahl
       </h3>
 
       {/* SECTION TYPES */}
@@ -122,7 +130,7 @@ const AircraftTypesAndSlots = ({ value, onChange }: AircraftTypesAndSlotsProps) 
             className="rounded-md border border-border px-2 py-1"
           >
             {availableSizes.map((s) => (
-              <option key={s} value={s}>
+              <option key={s} value={s} title={flugzeugGroessenConfig[s]}>
                 {s}
               </option>
             ))}

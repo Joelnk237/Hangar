@@ -29,7 +29,7 @@ const headerDataHAnbieter = [
     ],
   },
   
-  { label: "Nachrichten", href: "/nachrichte" },
+  { label: "Reservierungen", href: "/reservierungen" },
   { label: "Profil", href: "/nachrichte" },
 ];
 const headerDataFBesitzer = [

@@ -33,6 +33,11 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
     flugkilometer: "",
     treibstoffverbrauch: "",
     frachtkapazitaet: "",
+    /*abmasse:{
+    fluegelspannweite:"",
+    laenge: "",
+    hoehe: "",
+    }*/
   });
 
   /* -------- Initialisierung bei Edit -------- */
@@ -114,6 +119,15 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
     }
   };
 
+  const flugzeugGroessenConfig = {
+    XS: "Abmaße: Flügelspannweite < 10 m | Länge < 6 m | Höhe < 2,5 m",
+    S: "Abmaße: Flügelspannweite 10–15 m | Länge 6–8 m | Höhe 2,5–3,5 m",
+    M: "Abmaße: Flügelspannweite 15–20 m | Länge 8–12 m | Höhe 3,5–5 m",
+    L: "Abmaße: Flügelspannweite 20–25 m | Länge 12–16 m | Höhe 5–7 m",
+    XL: "Abmaße: Flügelspannweite > 25 m | Länge > 16 m | Höhe > 7 m",
+  };
+
+
   return (
     <div className="pt-20 pb-32 bg-light dark:bg-darkmode">
       <div className="pt-11 flex justify-center items-center text-center ">
@@ -181,6 +195,13 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
               <option key={g} value={g}>{g}</option>
             ))}
           </select>
+          {formData.flugzeuggroesse && (
+            <>
+            <p></p>
+            <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">{flugzeugGroessenConfig[formData.flugzeuggroesse as keyof typeof flugzeugGroessenConfig]}</p>
+            </>
+          )}{!formData.flugzeuggroesse &&(<><p></p><p className="mt-2 text-xs text-gray-600 dark:text-gray-300"></p></>)}
+
         </div>
 
         {/* ---------------- Betriebsdaten ---------------- */}

@@ -22,6 +22,11 @@ export type FlugzeugFormData = {
   flugkilometer: number | "";
   treibstoffverbrauch: number | "";
   frachtkapazitaet: number | "";
+  /*abmasse:{
+    fluegelspannweite: number | "";
+    laenge: number | "";
+    hoehe: number | "";
+  }*/
 };
 
 export type FlugzeugInfoProps = {

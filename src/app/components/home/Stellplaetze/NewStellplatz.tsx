@@ -5,16 +5,6 @@ import { useRouter } from "next/navigation";
 import Loader from "../../shared/Loader";
 /* ------------------ CONFIG HANGARANBIETER ------------------ */
 
-/*const hAnbieterInfos = {
-  services: {
-    einlagerung: { price: 30, unit: "pro Tag" },
-    flugbereitschaft: { price: 45, unit: "pro Vorgang" },
-    tanken: { price: 3, unit: "pro Liter" },
-    reinigung: { price: 5, unit: "komplett" },
-  },
-  flugzeugtyp: ["SEP", "MEP", "Helikopter"],
-  flugzeugsgrösse: ["XS", "S", "M"],
-};*/
 
 type AnbieterInfos = {
   flugzeugtyp: string[];
@@ -41,6 +31,14 @@ type StellplatzInfos = {
   standort?: string;
   besonderheit?: string;
 };
+
+const flugzeugGroessenConfig = {
+    XS: "Abmaße: Flügelspannweite < 10 m | Länge < 6 m | Höhe < 2,5 m",
+    S: "Abmaße: Flügelspannweite 10–15 m | Länge 6–8 m | Höhe 2,5–3,5 m",
+    M: "Abmaße: Flügelspannweite 15–20 m | Länge 8–12 m | Höhe 3,5–5 m",
+    L: "Abmaße: Flügelspannweite 20–25 m | Länge 12–16 m | Höhe 5–7 m",
+    XL: "Abmaße: Flügelspannweite > 25 m | Länge > 16 m | Höhe > 7 m",
+  };
 
 type FormData = {
   kennzeichen: string;
@@ -319,6 +317,12 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
                   <option key={g} value={g}>{g}</option>
                 ))}
       </select>
+      {formData.flugzeuggroesse && (
+        <>
+        <p></p>
+        <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">{flugzeugGroessenConfig[formData.flugzeuggroesse as keyof typeof flugzeugGroessenConfig]}</p>
+        </>
+      )}
     </div>
 
   </div>

@@ -13,6 +13,51 @@ type Props = {
 };
 const Reservierungen = ({ reservierungen }: Props) => {
     var i=0;
+    const router = useRouter();
+
+  const [showModal, setShowModal] = useState(false);
+  const [selected, setSelected] = useState<{
+    stellplatzId: string;
+    flugzeugId: string;
+  } | null>(null);
+
+
+  const deleteReservierung = async () => {
+    if (!selected) return;
+
+    const token = localStorage.getItem("token");
+
+    try {
+      const res = await fetch(
+        "http://localhost:8888/api/hangaranbieter/reservierungen",
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            stellplatzId: selected.stellplatzId,
+            flugzeugId: selected.flugzeugId,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text);
+      }
+
+      setShowModal(false);
+      setSelected(null);
+
+      // 
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+      alert("Fehler beim Stornieren der Reservierung");
+    }
+  };
 
 
 
@@ -32,7 +77,36 @@ const Reservierungen = ({ reservierungen }: Props) => {
     
 
     return(
+
     <>
+        {/* ================= MODAL ================= */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+          <div className="bg-white dark:bg-semidark rounded-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold mb-4">
+              Reservierung stornieren
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+              Sind Sie sicher, dass Sie diese Reservierung stornieren möchten?
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 rounded-lg border hover:bg-gray-100"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={deleteReservierung}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
+              >
+                Bestätigen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
         <div className="pt-24 pb-32 h-[95vh] bg-light dark:bg-darkmode">
             <div className="pt-11 flex justify-center items-center text-center ">
        
@@ -66,7 +140,13 @@ const Reservierungen = ({ reservierungen }: Props) => {
                     <div>{r.flugzeugbesitzer.email}</div>
                     <div>
                     <button 
-                        
+                        onClick={() => {
+                        setSelected({
+                          stellplatzId: r.stellplatz.id,
+                          flugzeugId: r.flugzeug.id,
+                        });
+                        setShowModal(true);
+                      }}
                         className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
                         title="stornieren"
                     >

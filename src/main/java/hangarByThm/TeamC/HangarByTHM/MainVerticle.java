@@ -203,6 +203,11 @@ public class MainVerticle extends VerticleBase {
       .handler(this::hangaranbieterContextHandler)
       .handler(this::deleteZusatzserviceHandler);
 
+    router.get("/api/hangaranbieter/reservierungen")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::getReservierungenHandler);
+
     router.get("/api/stellplaetze/:id")
       .handler(this::getStellplatzInfosHandler);
 
@@ -2240,12 +2245,86 @@ public class MainVerticle extends VerticleBase {
       });
   }
 
+  // Reservierungen
+  private void getReservierungenHandler(RoutingContext ctx) {
 
+    UUID hangaranbieterId = ctx.get("anbieterId");
 
+    String sql = """
+    SELECT
+      sp.id                AS stellplatz_id,
+      sp.kennzeichen       AS stellplatz_kennzeichen,
+      sp.standort          AS stellplatz_standort,
 
+      f.id                 AS flugzeug_id,
+      f.kennzeichen        AS flugzeug_kennzeichen,
 
+      fb.id                AS besitzer_id,
+      b.name               AS besitzer_name,
+      b.email              AS besitzer_email,
 
+      fzs.von,
+      fzs.bis
+    FROM flugzeug_zu_stellplatz fzs
+    JOIN stellplatz sp
+      ON sp.id = fzs.stellplatz_id
+    JOIN flugzeug f
+      ON f.id = fzs.flugzeug_id
+    JOIN flugzeugbesitzer fb
+      ON fb.id = f.flugzeugbesitzer_id
+    JOIN benutzer b
+      ON b.id = fb.benutzer_id
+    WHERE sp.hangaranbieter_id = $1
+    ORDER BY fzs.von DESC
+  """;
 
+    client.preparedQuery(sql)
+      .execute(Tuple.of(hangaranbieterId))
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler beim Laden der Reservierungen");
+      })
+      .onSuccess(rows -> {
+
+        JsonArray result = new JsonArray();
+
+        rows.forEach(row -> {
+
+          JsonObject reservierung = new JsonObject()
+
+            .put("stellplatz", new JsonObject()
+              .put("id", row.getUUID("stellplatz_id").toString())
+              .put("kennzeichen", row.getString("stellplatz_kennzeichen"))
+              .put("standort", row.getString("stellplatz_standort"))
+            )
+
+            .put("flugzeug", new JsonObject()
+              .put("id", row.getUUID("flugzeug_id").toString())
+              .put("kennzeichen", row.getString("flugzeug_kennzeichen"))
+            )
+
+            .put("flugzeugbesitzer", new JsonObject()
+              .put("id", row.getUUID("besitzer_id").toString())
+              .put("name", row.getString("besitzer_name"))
+              .put("email", row.getString("besitzer_email"))
+            )
+
+            .put("zeitraum", new JsonObject()
+              .put("von", row.getLocalDate("von").toString())
+              .put("bis", row.getLocalDate("bis").toString())
+            );
+
+          result.add(reservierung);
+        });
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .setStatusCode(200)
+          .end(result.encode());
+      });
+  }
 
 
 

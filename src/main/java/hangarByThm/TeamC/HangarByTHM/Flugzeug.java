@@ -168,6 +168,13 @@ public class Flugzeug {
   }
 
 
+  public Flugzeug(UUID flugzeugbesitzerId, String kennzeichen, UUID id) {
+    this.flugzeugbesitzerId = flugzeugbesitzerId;
+    this.kennzeichen = kennzeichen;
+    this.id = id;
+  }
+  public Flugzeug() {}
+
   public static Flugzeug fromRow(Row row) {
     Flugzeug f = new Flugzeug();
 

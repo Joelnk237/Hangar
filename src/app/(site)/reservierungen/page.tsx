@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import Services from '@/app/components/services/Services';
+import Reservierungen from '@/app/components/reservierung';
 import { useRouter } from "next/navigation";
-import { allServicesTyp } from '@/app/types/property/allServices';
+import { Reservierung } from '@/app/types/property/reservierung';
 import Loader from '@/app/components/shared/Loader';
 
 
@@ -11,7 +11,7 @@ const Page = () => {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-  const [allServices, setAllServices] = useState<allServicesTyp | null>(null);
+  const [reservierungen, setReservierungen] = useState<Reservierung[]>([]);;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,35 +24,33 @@ const Page = () => {
 
     const fetchData = async () => {
       try {
-        const [servicesRes, zusatzservicesRes] = await Promise.all([
-          fetch("http://localhost:8888/api/hangaranbieter/services", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch("http://localhost:8888/api/hangaranbieter/zusatzservices", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
 
-        // AUTH ERRORS
-        if (servicesRes.status === 401 || zusatzservicesRes.status === 401) {
+        const res = await fetch("http://localhost:8888/api/hangaranbieter/reservierungen", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (res.status === 401) {
           router.push("/signin");
           return;
         }
 
-        if (servicesRes.status === 403 || zusatzservicesRes.status === 403) {
-          throw new Error("Zugriff verweigert");
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || "Fehler beim Laden der Reservierungen");
         }
 
-        if (!servicesRes.ok || !zusatzservicesRes.ok) {
-          throw new Error("Fehler beim Laden der Services");
-        }
+        const data: Reservierung[] = await res.json();
+        setReservierungen(data);
+        
 
-        const services = await servicesRes.json();
-        const zusatzservices = await zusatzservicesRes.json();
 
-        setAllServices({ services, zusatzservices });
       } catch (err: any) {
-        setError(err.message);
+        console.error(err);
+        setError(err.message || "Unbekannter Fehler");
       } finally {
         setLoading(false);
       }
@@ -71,10 +69,10 @@ const Page = () => {
     return <div className="pt-20 text-center text-red-600">{error}</div>;
   }
 
-  if (!allServices) return null;
+  if (!reservierungen) return null;
 
 
-  return <Services allServices={allServices} />;
+  return <Reservierungen reservierungen={reservierungen} />;
 };
 
 export default Page;

@@ -169,10 +169,39 @@ public class MainVerticle extends VerticleBase {
       .handler(this::hangaranbieterContextHandler)
       .handler(this::getAngeboteneServicesHandler);
 
+    router.post("/api/hangaranbieter/services")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::createAngeboteneServicesHandler);
+
+    router.put("/api/hangaranbieter/services")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::updateAngeboteneServicesHandler);
+
+    router.delete("/api/hangaranbieter/services/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::deleteAngeboteneServiceHandler);
+
     router.get("/api/hangaranbieter/zusatzservices")
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::getZusatzservicesHandler);
+
+    router.post("/api/hangaranbieter/zusatzservices")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::createZusatzserviceHandler);
+
+    router.put("/api/hangaranbieter/zusatzservices")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::updateZusatzserviceHandler);
+    router.delete("/api/hangaranbieter/zusatzservices/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::deleteZusatzserviceHandler);
 
     router.get("/api/stellplaetze/:id")
       .handler(this::getStellplatzInfosHandler);
@@ -1922,6 +1951,298 @@ public class MainVerticle extends VerticleBase {
         return result;
       });
   }
+
+  //create Service
+  private void createAngeboteneServicesHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+    JsonArray body = ctx.body().asJsonArray();
+
+    if (body == null || body.isEmpty()) {
+      ctx.response().setStatusCode(400).end("Keine Services übergeben");
+      return;
+    }
+
+    String sql = """
+    INSERT INTO angebotene_services
+      (hangaranbieter_id, service_id, preis, einheit)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (hangaranbieter_id, service_id) DO NOTHING
+  """;
+
+    Future<Void> chain = Future.succeededFuture();
+
+    for (int i = 0; i < body.size(); i++) {
+      JsonObject s = body.getJsonObject(i);
+
+      Integer serviceId = s.getInteger("serviceId");
+      Double preis = s.getDouble("preis");
+      String einheit = s.getString("einheit");
+
+      if (serviceId == null || preis == null || einheit == null) {
+        ctx.response().setStatusCode(400).end("Ungültige Service-Daten");
+        return;
+      }
+
+      chain = chain.compose(v ->
+        client.preparedQuery(sql)
+          .execute(Tuple.of(
+            hangaranbieterId,
+            serviceId,
+            preis,
+            einheit
+          ))
+          .mapEmpty()
+      );
+    }
+
+    chain
+      .onSuccess(v ->
+        ctx.response()
+          .setStatusCode(201)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Services erfolgreich hinzugefügt")
+            .encode())
+      )
+      .onFailure(err -> ctx.fail(500, err));
+  }
+
+  //update Service Infos
+  private void updateAngeboteneServicesHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+    JsonObject body = ctx.body().asJsonObject();
+
+    Integer serviceId = body.getInteger("serviceId");
+    Double preis = body.getDouble("preis");
+    String einheit = body.getString("einheit");
+
+    if (serviceId == null || preis == null || einheit == null) {
+      ctx.response().setStatusCode(400).end("Ungültige Daten");
+      return;
+    }
+
+    String sql = """
+    UPDATE angebotene_services
+    SET preis = $1,
+        einheit = $2
+    WHERE hangaranbieter_id = $3
+      AND service_id = $4
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(
+        preis,
+        einheit,
+        hangaranbieterId,
+        serviceId
+      ))
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response().setStatusCode(404).end("Service nicht gefunden");
+        } else {
+          ctx.response()
+            .setStatusCode(200)
+            .putHeader("Content-Type", "application/json")
+            .end(new JsonObject()
+              .put("message", "Service erfolgreich aktualisiert")
+              .encode());
+        }
+      })
+      .onFailure(err -> ctx.fail(500, err));
+  }
+
+  //delete Service
+  private void deleteAngeboteneServiceHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+
+    Integer serviceId;
+    try {
+      serviceId = Integer.parseInt(ctx.pathParam("id"));
+    } catch (NumberFormatException e) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("Ungültige Service-ID");
+      return;
+    }
+
+    String sql = """
+    DELETE FROM angebotene_services
+    WHERE hangaranbieter_id = $1
+      AND service_id = $2
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(hangaranbieterId, serviceId))
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response()
+            .setStatusCode(404)
+            .end("Service nicht gefunden oder kein Zugriff");
+        } else {
+          ctx.response()
+            .setStatusCode(200)
+            .putHeader("Content-Type", "application/json")
+            .end(new JsonObject()
+              .put("message", "Service erfolgreich gelöscht")
+              .encode());
+        }
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler beim Löschen des Services");
+      });
+  }
+
+
+  //create Zusatzservice
+  private void createZusatzserviceHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+    JsonObject body = ctx.body().asJsonObject();
+
+    String bezeichnung = body.getString("bezeichnung");
+    String beschreibung = body.getString("beschreibung");
+    Double preis = body.getDouble("preis");
+    String einheit = body.getString("einheit");
+
+    if (bezeichnung == null || preis == null || einheit == null) {
+      ctx.response().setStatusCode(400).end("Pflichtfelder fehlen");
+      return;
+    }
+
+    String sql = """
+    INSERT INTO zusatzservice
+      (bezeichnung, beschreibung, hangaranbieter_id, preis, einheit)
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING id
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(
+        bezeichnung,
+        beschreibung,
+        hangaranbieterId,
+        preis,
+        einheit
+      ))
+      .onSuccess(rows -> {
+        Integer id = rows.iterator().next().getInteger("id");
+
+        ctx.response()
+          .setStatusCode(201)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("id", id)
+            .put("message", "Zusatzservice erstellt")
+            .encode());
+      })
+      .onFailure(err -> ctx.fail(500, err));
+  }
+
+  // Zusatzservice updaten
+  private void updateZusatzserviceHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+    JsonObject body = ctx.body().asJsonObject();
+
+    Integer id = body.getInteger("id");
+    String bezeichnung = body.getString("bezeichnung");
+    String beschreibung = body.getString("beschreibung");
+    Double preis = body.getDouble("preis");
+    String einheit = body.getString("einheit");
+
+    if (id == null || bezeichnung == null || preis == null || einheit == null) {
+      ctx.response().setStatusCode(400).end("Ungültige Daten");
+      return;
+    }
+
+    String sql = """
+    UPDATE zusatzservice
+    SET bezeichnung = $1,
+        beschreibung = $2,
+        preis = $3,
+        einheit = $4
+    WHERE id = $5
+      AND hangaranbieter_id = $6
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(
+        bezeichnung,
+        beschreibung,
+        preis,
+        einheit,
+        id,
+        hangaranbieterId
+      ))
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response().setStatusCode(404).end("Zusatzservice nicht gefunden");
+        } else {
+          ctx.response()
+            .setStatusCode(200)
+            .putHeader("Content-Type", "application/json")
+            .end(new JsonObject()
+              .put("message", "Zusatzservice aktualisiert")
+              .encode());
+        }
+      })
+      .onFailure(err -> ctx.fail(500, err));
+  }
+
+  //zusatzservice löschen
+  private void deleteZusatzserviceHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+
+    Integer zusatzserviceId;
+    try {
+      zusatzserviceId = Integer.parseInt(ctx.pathParam("id"));
+    } catch (NumberFormatException e) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("Ungültige Zusatzservice-ID");
+      return;
+    }
+
+    String sql = """
+    DELETE FROM zusatzservice
+    WHERE id = $1
+      AND hangaranbieter_id = $2
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(zusatzserviceId, hangaranbieterId))
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response()
+            .setStatusCode(404)
+            .end("Zusatzservice nicht gefunden oder kein Zugriff");
+        } else {
+          ctx.response()
+            .setStatusCode(200)
+            .putHeader("Content-Type", "application/json")
+            .end(new JsonObject()
+              .put("message", "Zusatzservice erfolgreich gelöscht")
+              .encode());
+        }
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler beim Löschen des Zusatzservices");
+      });
+  }
+
+
+
+
 
 
 

@@ -16,16 +16,17 @@ const headerDataHAnbieter = [
     label: "Anfragen",
     href: "#",
     submenu: [
-      { label: "Reparaturanfragen", href: "/properties/properties-list" },
-      { label: "Wartungsanfragen", href: "/properties/properties-list/modern-apartment" },
+      { label: "Angebotsanfragen", href: "anfragen/angebote" },
+      { label: "Reparaturanfragen", href: "#" },
+      { label: "Wartungsanfragen", href: "#" },
     ],
   },
   {
     label: "Termine",
     href: "#",
     submenu: [
-      { label: "Abhol-/ Rückgabe Termine", href: "/blogs" },
-      { label: "Werkstatt-termin", href: "/blogs/blog_1" },
+      { label: "Abhol-/ Rückgabe Termine", href: "#" },
+      { label: "Werkstatt-termin", href: "#" },
     ],
   },
   

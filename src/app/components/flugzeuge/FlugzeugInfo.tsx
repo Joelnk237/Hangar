@@ -2,6 +2,7 @@
 import { FlugzeugInfoProps } from "@/app/types/property/flugzeug";
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { Edit } from "lucide-react";
 
 const Section = ({
   title,
@@ -54,6 +55,13 @@ const FlugzeugInfo = ({ flugzeugInfos }: { flugzeugInfos: FlugzeugInfoProps }) =
   const [loadingZusatz, setLoadingZusatz] = useState(false);
   const [zusatzservices, setZusatzservices] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const [showTerminModal, setShowTerminModal] = useState(false);
+const [terminDate, setTerminDate] = useState("");
+const [terminTime, setTerminTime] = useState("");
+const [istUebergabe, setIstUebergabe] = useState<boolean>(true);
+const [terminLoading, setTerminLoading] = useState(false);
+
 
 
   const handleOpenZusatzservices = async () => {
@@ -128,6 +136,71 @@ const handleBookZusatzservice = async (zusatzserviceId: number) => {
     toast.error("Fehler bei der Buchung");
   }
 };
+
+const isDateInRange = (dateTime: Date) => {
+  const von = new Date(flugzeugInfos.hangar.von);
+  const bis = new Date(flugzeugInfos.hangar.bis);
+
+  return dateTime >= von && dateTime <= bis;
+};
+
+const handleConfirmTermin = async () => {
+  if (!terminDate || !terminTime) {
+    toast.error("Bitte Datum und Uhrzeit auswählen");
+    return;
+  }
+
+  const terminDateTime = new Date(`${terminDate}T${terminTime}`);
+
+  if (!isDateInRange(terminDateTime)) {
+    toast.error("Der Termin liegt außerhalb des Reservierungszeitraums");
+    return;
+  }
+
+  setTerminLoading(true);
+
+  try {
+    const token = localStorage.getItem("token");
+
+    const payload = {
+      termin_zeitpunkt: terminDateTime.toISOString(),
+      ist_uebergabe: istUebergabe,
+      hangaranbieter_id: flugzeugInfos.hangar.hangaranbieterId,
+      stellplatz_id: flugzeugInfos.hangar.stellplatz_id,
+    };
+
+    const res = await fetch("http://localhost:8888/api/termine", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error("Termin konnte nicht gespeichert werden");
+    }
+
+    toast.success("Termin erfolgreich gespeichert");
+    setShowTerminModal(false);
+    window.location.reload();
+  } catch (err) {
+    console.error(err);
+    toast.error("Fehler beim Speichern des Termins");
+  } finally {
+    setTerminLoading(false);
+  }
+};
+const formatTermin = (isoString: string) => {
+  const date = new Date(isoString);
+
+  return date.toLocaleString("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+};
+
 
 
 
@@ -234,11 +307,23 @@ const handleBookZusatzservice = async (zusatzserviceId: number) => {
           />
           <LabelValue
             label="Übergabetermin:"
-            value={flugzeugInfos.hangar.uebergabetermin}
+            value={flugzeugInfos.hangar.uebergabetermin != null ? formatTermin(flugzeugInfos.hangar.uebergabetermin) 
+              : (<button onClick={() => {
+                  setIstUebergabe(true);
+                  setShowTerminModal(true);
+                }} 
+              className="rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
+            title="Übergabetermin auswählen"><Edit/></button>)}
           />
           <LabelValue
             label="Rückgabetermin:"
-            value={flugzeugInfos.hangar.rueckgabetermin}
+            value={flugzeugInfos.hangar.rueckgabetermin!= null ? formatTermin(flugzeugInfos.hangar.rueckgabetermin) 
+              : (<button onClick={() => {
+              setIstUebergabe(false);
+              setShowTerminModal(true);
+            }} 
+            className=" rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
+            title="Rückgabetermin auswählen"><Edit/></button>)}
           />
         </div>
 
@@ -337,7 +422,56 @@ const handleBookZusatzservice = async (zusatzserviceId: number) => {
   </div>
 )}
 
-    
+    {showTerminModal && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white dark:bg-semidark rounded-lg p-6 w-full max-w-md space-y-4">
+
+      <h2 className="text-lg font-semibold">
+        {istUebergabe ? "Übergabetermin wählen" : "Rückgabetermin wählen"}
+      </h2>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-sm mb-1">Datum</label>
+          <input
+            type="date"
+            className="w-full border rounded px-3 py-2"
+            value={terminDate}
+            onChange={(e) => setTerminDate(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm mb-1">Uhrzeit</label>
+          <input
+            type="time"
+            className="w-full border rounded px-3 py-2"
+            value={terminTime}
+            onChange={(e) => setTerminTime(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4">
+        <button
+          onClick={() => setShowTerminModal(false)}
+          className="px-4 py-2 border rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+        >
+          Abbrechen
+        </button>
+
+        <button
+          disabled={terminLoading}
+          onClick={handleConfirmTermin}
+          className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50"
+        >
+          Bestätigen
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
     
     </>
   );

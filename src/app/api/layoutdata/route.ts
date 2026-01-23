@@ -39,6 +39,7 @@ const headerDataFBesitzer = [
   { label: "Flugzeuge", href: "/flugzeuge" },
   { label: "Anfragen", href: "#" },
   { label: "Angebote", href: "/angebote/flugzeugbesitzer" },
+  { label: "Termine", href: "/termine" },
   { label: "Nachrichten", href: "/nachrichten" }, 
 ];
 

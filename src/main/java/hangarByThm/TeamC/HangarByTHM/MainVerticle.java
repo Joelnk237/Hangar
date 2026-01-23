@@ -248,20 +248,60 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::flugzeugbesitzerContextHandler)
       .handler(this::getFlugzeugDetailsHandler);
+    //reservierung stornieren
+    router.delete("/api/hangaranbieter/reservierungen")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::deleteReservierungHandler);
+
+    //Angebot anfordern
+    router.post("/api/angebote")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::createAngebotAnfrageHandler);
+
+   // erhaltene Angebote
+    router.get("/api/angebote/me")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::getMyAnsweredAngeboteHandler);
+
+    //Angebot annehmen
+    router.put("/api/angebote/:id/accept")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::acceptAngebotHandler);
+
+    //Angebot ablehnen
+    router.put("/api/angebote/:id/deny")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::denyAngebotHandler);
+
+    // Angebot erfassen
+    router.put("/api/angebote/:id/propose")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::proposeAngebotHandler);
+
+    //erhaltene Angebotsanfragen
+    router.get("/api/angebote/received")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::getReceivedAngeboteHandler);
+
+    //Angebot stornieren
+    router.delete("/api/angebote/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::deleteAngebotHandler);
 
 
 
 
 
-    pool
-      .query("SELECT 1")
-      .execute()
-      .onSuccess(res -> {
-        System.out.println("✅ Connexion PostgreSQL OK !");
-      })
-      .onFailure(err -> {
-        System.err.println("❌ Error connexion PostgreSQL");
-      });
+
+
     return vertx.createHttpServer().requestHandler(router)
       .listen(8888).onSuccess(http -> {
       System.out.println("HTTP server started on port 8888");
@@ -1431,6 +1471,7 @@ public class MainVerticle extends VerticleBase {
       s.besonderheit,
       s.flugzeugtyp,
       s.flugzeuggroesse,
+      h.id AS anbieter_id,
       h.firmenname,
       h.hangar_merkmale,
       COALESCE(
@@ -1497,6 +1538,7 @@ public class MainVerticle extends VerticleBase {
 
     return new JsonObject()
       .put("id", row.getUUID("id"))
+      .put("anbieterId", row.getUUID("anbieter_id"))
       .put("anbieterName", row.getString("firmenname"))
       .put("ort", row.getString("standort"))
       .put("availability", row.getBoolean("availability"))
@@ -1509,6 +1551,91 @@ public class MainVerticle extends VerticleBase {
   }
 
   //Stellplatz reservieren
+  private Future<Void> createReservierung(
+    UUID flugzeugbesitzerId,
+    UUID stellplatzId,
+    UUID flugzeugId,
+    LocalDate von,
+    LocalDate bis
+  ) {
+
+  /* -------------------------------
+     ob das Flugzeug dem Benutzer gehört
+     ------------------------------- */
+    String checkFlugzeugSql = """
+    SELECT 1
+    FROM flugzeug
+    WHERE id = $1
+      AND flugzeugbesitzer_id = $2
+  """;
+
+    return client.preparedQuery(checkFlugzeugSql)
+      .execute(Tuple.of(flugzeugId, flugzeugbesitzerId))
+      .compose(rows -> {
+        if (!rows.iterator().hasNext()) {
+          return Future.failedFuture("FLUGZEUG_NOT_OWNED");
+        }
+
+  /* -------------------------------
+     2. Verfügbarkeit prüfen
+     ------------------------------- */
+        String checkAvailabilitySql = """
+        SELECT 1
+        FROM flugzeug_zu_stellplatz
+        WHERE stellplatz_id = $1
+          AND NOT (bis < $2 OR von > $3)
+      """;
+
+        return client.preparedQuery(checkAvailabilitySql)
+          .execute(Tuple.of(stellplatzId, von, bis));
+      })
+      .compose(rows -> {
+        if (rows.iterator().hasNext()) {
+          return Future.failedFuture("STELLPLATZ_BELEGT");
+        }
+
+  /* -------------------------------
+     3. Insert réservation
+     ------------------------------- */
+        String insertSql = """
+        INSERT INTO flugzeug_zu_stellplatz
+        (stellplatz_id, flugzeug_id, von, bis)
+        VALUES ($1, $2, $3, $4)
+      """;
+
+        return client.preparedQuery(insertSql)
+          .execute(Tuple.of(stellplatzId, flugzeugId, von, bis));
+      })
+      .compose(v -> {
+
+  /* -------------------------------
+     4. Flugzeug belegt
+     ------------------------------- */
+        String updateFlugzeugSql = """
+        UPDATE flugzeug
+        SET belegt = true
+        WHERE id = $1
+      """;
+
+        return client.preparedQuery(updateFlugzeugSql)
+          .execute(Tuple.of(flugzeugId));
+      })
+      .compose(v -> {
+
+  /* -------------------------------
+     Zustand initial
+     ------------------------------- */
+        String createZustandSql = """
+        INSERT INTO zustand (flugzeug_id, stellplatz_id)
+        VALUES ($1, $2)
+      """;
+
+        return client.preparedQuery(createZustandSql)
+          .execute(Tuple.of(flugzeugId, stellplatzId));
+      })
+      .mapEmpty();
+  }
+
   private void makeReservierung(RoutingContext ctx) {
 
     UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
@@ -1548,82 +1675,16 @@ public class MainVerticle extends VerticleBase {
       return;
     }
 
-  /* --------------------------------------------------
-     Prüfen: gehört das Flugzeug dem Benutzer?
-     -------------------------------------------------- */
-    String checkFlugzeugSql = """
-    SELECT id
-    FROM flugzeug
-    WHERE id = $1
-      AND flugzeugbesitzer_id = $2
-  """;
-
-    client.preparedQuery(checkFlugzeugSql)
-      .execute(Tuple.of(flugzeugId, flugzeugbesitzerId))
-      .compose(rows -> {
-        if (!rows.iterator().hasNext()) {
-          return Future.failedFuture("FLUGZEUG_NOT_OWNED");
-        }
-
-      /* --------------------------------------------------
-        Prüfen: ist Stellplatz im Zeitraum frei?
-         -------------------------------------------------- */
-        String checkAvailabilitySql = """
-        SELECT 1
-        FROM flugzeug_zu_stellplatz
-        WHERE stellplatz_id = $1
-          AND NOT (
-            bis < $2 OR von > $3
-          )
-      """;
-
-        return client.preparedQuery(checkAvailabilitySql)
-          .execute(Tuple.of(stellplatzId, von, bis));
-      })
-      .compose(rows -> {
-        if (rows.iterator().hasNext()) {
-          return Future.failedFuture("STELLPLATZ_BELEGT");
-        }
-
-      /* --------------------------------------------------
-         Reservierung anlegen
-         -------------------------------------------------- */
-        String insertSql = """
-        INSERT INTO flugzeug_zu_stellplatz
-        (stellplatz_id, flugzeug_id, von, bis)
-        VALUES ($1, $2, $3, $4)
-      """;
-
-        return client.preparedQuery(insertSql)
-          .execute(Tuple.of(stellplatzId, flugzeugId, von, bis));
-      })
-      .compose(v -> {
-
-
-        String updateFlugzeugSql = """
-        UPDATE flugzeug
-        SET belegt = true
-        WHERE id = $1
-      """;
-
-        return client.preparedQuery(updateFlugzeugSql)
-          .execute(Tuple.of(flugzeugId));
-      })
-      .compose(v -> {
-
-
-        String createZustand = """
-        INSERT INTO zustand (flugzeug_id, stellplatz_id)
-                     VALUES ($1, $2);
-      """;
-
-        return client.preparedQuery(createZustand)
-          .execute(Tuple.of(flugzeugId,stellplatzId));
-      })
+    createReservierung(
+      flugzeugbesitzerId,
+      stellplatzId,
+      flugzeugId,
+      von,
+      bis
+    )
       .onSuccess(v ->
         ctx.response()
           .setStatusCode(201)
-          .putHeader("Content-Type", "application/json")
           .end(new JsonObject()
             .put("message", "Reservierung erfolgreich erstellt")
             .encode())
@@ -1640,6 +1701,7 @@ public class MainVerticle extends VerticleBase {
           }
         }
       });
+
   }
 
   //belegte Flugzeuge
@@ -2325,6 +2387,623 @@ public class MainVerticle extends VerticleBase {
           .end(result.encode());
       });
   }
+
+  //eine Reservierung stornieren
+  private void deleteReservierungHandler(RoutingContext ctx) {
+    UUID anbieterId = ctx.get("anbieterId");
+
+    JsonObject body = ctx.body().asJsonObject();
+    if (body == null) {
+      ctx.response().setStatusCode(400).end("Request body fehlt");
+      return;
+    }
+
+    UUID stellplatzId;
+    UUID flugzeugId;
+
+    try {
+      stellplatzId = UUID.fromString(body.getString("stellplatzId"));
+      flugzeugId = UUID.fromString(body.getString("flugzeugId"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige UUID");
+      return;
+    }
+
+    /*
+     * Prüfen: gehört der Stellplatz diesem Hangaranbieter?
+     */
+    String checkOwnershipSql = """
+    SELECT 1
+    FROM stellplatz
+    WHERE id = $1 AND hangaranbieter_id = $2
+  """;
+
+    client.preparedQuery(checkOwnershipSql)
+      .execute(Tuple.of(stellplatzId, anbieterId))
+      .compose(rows -> {
+        if (!rows.iterator().hasNext()) {
+          return Future.failedFuture("FORBIDDEN");
+        }
+
+        /*
+         * Reservierung löschen
+         */
+        String deleteSql = """
+        DELETE FROM flugzeug_zu_stellplatz
+        WHERE stellplatz_id = $1 AND flugzeug_id = $2
+      """;
+
+        return client.preparedQuery(deleteSql)
+          .execute(Tuple.of(stellplatzId, flugzeugId));
+      })
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response().setStatusCode(404).end("Reservierung nicht gefunden");
+        } else {
+          ctx.response()
+            .setStatusCode(200)
+            .putHeader("Content-Type", "application/json")
+            .end(new JsonObject()
+              .put("message", "Reservierung erfolgreich gelöscht")
+              .encode()
+            );
+        }
+      })
+      .onFailure(err -> {
+        if ("FORBIDDEN".equals(err.getMessage())) {
+          ctx.response().setStatusCode(403).end("Kein Zugriff auf diesen Stellplatz");
+        } else {
+          err.printStackTrace();
+          ctx.response().setStatusCode(500).end("Serverfehler");
+        }
+      });
+  }
+
+  //Angebot anfordern
+  private void createAngebotAnfrageHandler(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+
+    JsonObject body = ctx.body().asJsonObject();
+    if (body == null) {
+      ctx.response().setStatusCode(400).end("Body fehlt");
+      return;
+    }
+
+    try {
+      UUID stellplatzId = UUID.fromString(body.getString("stellplatz_id"));
+      UUID hangaranbieterId = UUID.fromString(body.getString("hangaranbieter_id"));
+      UUID flugzeugId = UUID.fromString(body.getString("flugzeug_id"));
+
+      LocalDate von = LocalDate.parse(body.getString("von"));
+      LocalDate bis = LocalDate.parse(body.getString("bis"));
+
+      if (bis.isBefore(von)) {
+        ctx.response()
+          .setStatusCode(400)
+          .end("Ungültiger Zeitraum (bis < von)");
+        return;
+      }
+
+      String sql = """
+      INSERT INTO angebot (
+        stellplatz_id,
+        flugzeug_id,
+        flugzeugbesitzer_id,
+        hangaranbieter_id,
+        von,
+        bis,
+        accepted
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, NULL)
+      RETURNING id
+    """;
+
+      client.preparedQuery(sql)
+        .execute(Tuple.of(
+          stellplatzId,
+          flugzeugId,
+          flugzeugbesitzerId,
+          hangaranbieterId,
+          von,
+          bis
+        ))
+        .onSuccess(rows -> {
+
+          Integer angebotId = rows.iterator().next().getInteger("id");
+
+          ctx.response()
+            .setStatusCode(201)
+            .putHeader("Content-Type", "application/json")
+            .end(new JsonObject()
+              .put("message", "Angebotsanfrage erfolgreich erstellt")
+              .put("angebot_id", angebotId)
+              .encode()
+            );
+        })
+        .onFailure(err -> {
+
+          // 🔒 Contrainte UNIQUE violée
+          if (err.getMessage() != null &&
+            err.getMessage().contains("angebot_unique_pro_zeitraum")) {
+
+            ctx.response()
+              .setStatusCode(409)
+              .end("Für diesen Zeitraum existiert bereits ein Angebot");
+            return;
+          }
+
+          err.printStackTrace();
+          ctx.response()
+            .setStatusCode(500)
+            .end("Serverfehler beim Erstellen des Angebots");
+        });
+
+    } catch (Exception e) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("Ungültige Parameter");
+    }
+  }
+
+  //GET ANGEBOTE
+  private void getMyAnsweredAngeboteHandler(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+
+    String sql = """
+    SELECT
+      a.id,
+      a.accepted,
+      a.inhalt,
+      a.von,
+      a.bis,
+
+      s.id            AS stellplatz_id,
+      s.kennzeichen   AS stellplatz_kennzeichen,
+      s.standort      AS stellplatz_standort,
+
+      f.id            AS flugzeug_id,
+      f.kennzeichen   AS flugzeug_kennzeichen,
+
+      fb.id           AS flugzeugbesitzer_id,
+      b.name          AS flugzeugbesitzer_name,
+      b.email         AS flugzeugbesitzer_email
+
+    FROM angebot a
+    JOIN stellplatz s        ON s.id = a.stellplatz_id
+    JOIN flugzeug f          ON f.id = a.flugzeug_id
+    JOIN flugzeugbesitzer fb ON fb.id = a.flugzeugbesitzer_id
+    JOIN benutzer b          ON b.id = fb.benutzer_id
+
+    WHERE a.flugzeugbesitzer_id = $1
+      AND a.inhalt IS NOT NULL
+
+    ORDER BY a.von DESC
+  """;
+
+    client
+      .preparedQuery(sql)
+      .execute(Tuple.of(flugzeugbesitzerId))
+      .onSuccess(rows -> {
+
+        JsonArray result = new JsonArray();
+
+        for (Row row : rows) {
+
+          JsonObject angebot = new JsonObject()
+            .put("id", row.getInteger("id"))
+            .put("accepted", row.getBoolean("accepted"))
+            .put("inhalt", row.getString("inhalt"))
+            .put("stellplatz", new JsonObject()
+              .put("id", row.getUUID("stellplatz_id").toString())
+              .put("kennzeichen", row.getString("stellplatz_kennzeichen"))
+              .put("standort", row.getString("stellplatz_standort"))
+            )
+            .put("flugzeug", new JsonObject()
+              .put("id", row.getUUID("flugzeug_id").toString())
+              .put("kennzeichen", row.getString("flugzeug_kennzeichen"))
+            )
+            .put("flugzeugbesitzer", new JsonObject()
+              .put("id", row.getUUID("flugzeugbesitzer_id").toString())
+              .put("name", row.getString("flugzeugbesitzer_name"))
+              .put("email", row.getString("flugzeugbesitzer_email"))
+            )
+            .put("zeitraum", new JsonObject()
+              .put("von", row.getLocalDate("von").toString())
+              .put("bis", row.getLocalDate("bis").toString())
+            );
+
+          result.add(angebot);
+        }
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(result.encode());
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler beim Laden der Angebote");
+      });
+  }
+
+  // Angebote annehmen
+  private void acceptAngebotHandler(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+    int angebotId;
+
+    try {
+      angebotId = Integer.parseInt(ctx.pathParam("id"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige Angebots-ID");
+      return;
+    }
+
+    String selectSql = """
+    SELECT stellplatz_id, flugzeug_id, von, bis, accepted
+    FROM angebot
+    WHERE id = $1
+      AND flugzeugbesitzer_id = $2
+  """;
+
+    client.preparedQuery(selectSql)
+      .execute(Tuple.of(angebotId, flugzeugbesitzerId))
+      .compose(rows -> {
+        if (!rows.iterator().hasNext()) {
+          return Future.failedFuture("ANGEBOT_NOT_FOUND");
+        }
+
+        Row row = rows.iterator().next();
+
+        if (Boolean.TRUE.equals(row.getBoolean("accepted"))) {
+          return Future.failedFuture("ANGEBOT_ALREADY_ACCEPTED");
+        }
+
+        UUID stellplatzId = row.getUUID("stellplatz_id");
+        UUID flugzeugId   = row.getUUID("flugzeug_id");
+        LocalDate von     = row.getLocalDate("von");
+        LocalDate bis     = row.getLocalDate("bis");
+
+        String updateSql = """
+        UPDATE angebot
+        SET accepted = true
+        WHERE id = $1
+      """;
+
+        return client.preparedQuery(updateSql)
+          .execute(Tuple.of(angebotId))
+          .compose(v ->
+            createReservierung(
+              flugzeugbesitzerId,
+              stellplatzId,
+              flugzeugId,
+              von,
+              bis
+            )
+          );
+      })
+      .onSuccess(v ->
+        ctx.response()
+          .setStatusCode(200)
+          .end(new JsonObject()
+            .put("message", "Angebot akzeptiert und reserviert")
+            .encode())
+      )
+      .onFailure(err -> {
+        switch (err.getMessage()) {
+          case "ANGEBOT_NOT_FOUND" ->
+            ctx.response().setStatusCode(404).end("Angebot nicht gefunden");
+          case "ANGEBOT_ALREADY_ACCEPTED" ->
+            ctx.response().setStatusCode(409).end("Angebot bereits akzeptiert");
+          case "FLUGZEUG_NOT_OWNED" ->
+            ctx.response().setStatusCode(403).end("Flugzeug gehört nicht dem Benutzer");
+          case "STELLPLATZ_BELEGT" ->
+            ctx.response().setStatusCode(409).end("Stellplatz im Zeitraum belegt");
+          default -> {
+            err.printStackTrace();
+            ctx.response().setStatusCode(500).end("Serverfehler");
+          }
+        }
+      });
+  }
+
+  // Angebot ablehnen
+  private void denyAngebotHandler(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+    int angebotId;
+
+    try {
+      angebotId = Integer.parseInt(ctx.pathParam("id"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige Angebots-ID");
+      return;
+    }
+
+  /* -----------------------------------
+     ob das Abgebot dem Benutzer gehört
+     ----------------------------------- */
+    String selectSql = """
+    SELECT accepted
+    FROM angebot
+    WHERE id = $1
+      AND flugzeugbesitzer_id = $2
+  """;
+
+    client.preparedQuery(selectSql)
+      .execute(Tuple.of(angebotId, flugzeugbesitzerId))
+      .compose(rows -> {
+        if (!rows.iterator().hasNext()) {
+          return Future.failedFuture("ANGEBOT_NOT_FOUND");
+        }
+
+        Row row = rows.iterator().next();
+        Boolean accepted = row.getBoolean("accepted");
+
+        if (accepted != null) {
+          return Future.failedFuture("ANGEBOT_ALREADY_DECIDED");
+        }
+
+  /* -----------------------------------
+     update Spalte accepted
+     ----------------------------------- */
+        String updateSql = """
+        UPDATE angebot
+        SET accepted = false
+        WHERE id = $1
+      """;
+
+        return client.preparedQuery(updateSql)
+          .execute(Tuple.of(angebotId));
+      })
+      .onSuccess(v ->
+        ctx.response()
+          .setStatusCode(200)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Angebot wurde abgelehnt")
+            .encode())
+      )
+      .onFailure(err -> {
+        switch (err.getMessage()) {
+          case "ANGEBOT_NOT_FOUND" ->
+            ctx.response().setStatusCode(404).end("Angebot nicht gefunden");
+          case "ANGEBOT_ALREADY_DECIDED" ->
+            ctx.response().setStatusCode(409).end("Angebot wurde bereits bearbeitet");
+          default -> {
+            err.printStackTrace();
+            ctx.response().setStatusCode(500).end("Serverfehler");
+          }
+        }
+      });
+  }
+
+  //Angebot erfassen
+  private void proposeAngebotHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+    int angebotId;
+
+    try {
+      angebotId = Integer.parseInt(ctx.pathParam("id"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige Angebots-ID");
+      return;
+    }
+
+    JsonObject body = ctx.body().asJsonObject();
+    if (body == null || body.getString("inhalt") == null || body.getString("inhalt").isBlank()) {
+      ctx.response().setStatusCode(400).end("Inhalt fehlt");
+      return;
+    }
+
+    String inhalt = body.getString("inhalt");
+
+  /* ---------------------------------------
+     ob das Angebot dem user gehört
+     --------------------------------------- */
+    String checkSql = """
+    SELECT inhalt, accepted
+    FROM angebot
+    WHERE id = $1
+      AND hangaranbieter_id = $2
+  """;
+
+    client.preparedQuery(checkSql)
+      .execute(Tuple.of(angebotId, hangaranbieterId))
+      .compose(rows -> {
+
+        if (!rows.iterator().hasNext()) {
+          return Future.failedFuture("ANGEBOT_NOT_FOUND");
+        }
+
+        Row row = rows.iterator().next();
+
+        if (row.getString("inhalt") != null) {
+          return Future.failedFuture("ANGEBOT_ALREADY_PROPOSED");
+        }
+
+        if (row.getBoolean("accepted") != null) {
+          return Future.failedFuture("ANGEBOT_ALREADY_DECIDED");
+        }
+
+  /* ---------------------------------------
+     Update inhalt
+     --------------------------------------- */
+        String updateSql = """
+        UPDATE angebot
+        SET inhalt = $1
+        WHERE id = $2
+      """;
+
+        return client.preparedQuery(updateSql)
+          .execute(Tuple.of(inhalt, angebotId));
+      })
+      .onSuccess(v ->
+        ctx.response()
+          .setStatusCode(200)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Angebot erfolgreich übermittelt")
+            .encode())
+      )
+      .onFailure(err -> {
+        switch (err.getMessage()) {
+          case "ANGEBOT_NOT_FOUND" ->
+            ctx.response().setStatusCode(404).end("Angebot nicht gefunden");
+          case "ANGEBOT_ALREADY_PROPOSED" ->
+            ctx.response().setStatusCode(409).end("Angebot wurde bereits vorgeschlagen");
+          case "ANGEBOT_ALREADY_DECIDED" ->
+            ctx.response().setStatusCode(409).end("Angebot wurde bereits entschieden");
+          default -> {
+            err.printStackTrace();
+            ctx.response().setStatusCode(500).end("Serverfehler");
+          }
+        }
+      });
+  }
+
+  // erhalten Angebotanfragen
+  private void getReceivedAngeboteHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+
+    String sql = """
+    SELECT
+      a.id                     AS angebot_id,
+      a.accepted,
+      a.inhalt,
+      a.von,
+      a.bis,
+
+      s.id                     AS stellplatz_id,
+      s.kennzeichen            AS stellplatz_kennzeichen,
+      s.standort               AS stellplatz_standort,
+
+      f.id                     AS flugzeug_id,
+      f.kennzeichen            AS flugzeug_kennzeichen,
+
+      fb.id                    AS flugzeugbesitzer_id,
+      b.name                   AS flugzeugbesitzer_name,
+      b.email                  AS flugzeugbesitzer_email
+
+    FROM angebot a
+    JOIN stellplatz s ON s.id = a.stellplatz_id
+    JOIN flugzeug f ON f.id = a.flugzeug_id
+    JOIN flugzeugbesitzer fb ON fb.id = a.flugzeugbesitzer_id
+    JOIN benutzer b ON b.id = fb.benutzer_id
+    WHERE a.hangaranbieter_id = $1
+    ORDER BY a.von DESC
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(hangaranbieterId))
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler beim Laden der Angebote");
+      })
+      .onSuccess(rows -> {
+
+        JsonArray result = new JsonArray();
+
+        rows.forEach(row -> {
+          JsonObject angebot = new JsonObject()
+            .put("id", row.getInteger("angebot_id"))
+            .put("accepted", row.getBoolean("accepted"))
+            .put("inhalt", row.getString("inhalt"))
+
+            .put("stellplatz", new JsonObject()
+              .put("id", row.getUUID("stellplatz_id").toString())
+              .put("kennzeichen", row.getString("stellplatz_kennzeichen"))
+              .put("standort", row.getString("stellplatz_standort"))
+            )
+
+            .put("flugzeug", new JsonObject()
+              .put("id", row.getUUID("flugzeug_id").toString())
+              .put("kennzeichen", row.getString("flugzeug_kennzeichen"))
+            )
+
+            .put("flugzeugbesitzer", new JsonObject()
+              .put("id", row.getUUID("flugzeugbesitzer_id").toString())
+              .put("name", row.getString("flugzeugbesitzer_name"))
+              .put("email", row.getString("flugzeugbesitzer_email"))
+            )
+
+            .put("zeitraum", new JsonObject()
+              .put("von", row.getLocalDate("von").toString())
+              .put("bis", row.getLocalDate("bis").toString())
+            );
+
+          result.add(angebot);
+        });
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .setStatusCode(200)
+          .end(result.encode());
+      });
+  }
+
+  //Angebot löschen
+  private void deleteAngebotHandler(RoutingContext ctx) {
+
+    UUID hangaranbieterId = ctx.get("anbieterId");
+
+    Integer angebotId;
+    try {
+      angebotId = Integer.parseInt(ctx.pathParam("id"));
+    } catch (NumberFormatException e) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("Ungültige Angebot-ID");
+      return;
+    }
+
+    String sql = """
+    DELETE FROM angebot
+    WHERE id = $1
+      AND hangaranbieter_id = $2
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(angebotId, hangaranbieterId))
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Serverfehler");
+      })
+      .onSuccess(res -> {
+
+        if (res.rowCount() == 0) {
+          // soit inexistant, soit pas propriétaire
+          ctx.response()
+            .setStatusCode(404)
+            .end("Angebot nicht gefunden");
+          return;
+        }
+
+        ctx.response()
+          .setStatusCode(200)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Angebot erfolgreich gelöscht")
+            .encode());
+      });
+  }
+
+
+
+
+
+
+
+
 
 
 

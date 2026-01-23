@@ -3,6 +3,7 @@ package hangarByThm.TeamC.HangarByTHM;
 import io.vertx.core.Future;
 import io.vertx.core.MultiMap;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 
 import io.vertx.core.VerticleBase;
 import io.vertx.core.Vertx;
@@ -306,6 +307,19 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::deleteAngebotHandler);
+
+    //Übergabe/Rückgabetermin erfassen
+    router.post("/api/termine")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::createTerminHandler);
+
+    //GET meine Termine
+    router.get("/api/termine/me")
+      .handler(jwtAuthHandler)
+      .handler(this::terminMeHandler);
+
+
 
 
 
@@ -1892,7 +1906,7 @@ public class MainVerticle extends VerticleBase {
         JsonObject result = new JsonObject();
         result.put("flugzeug", flugzeug.toJson());
 
-        return loadHangarInfos(flugzeugId, result);
+        return loadHangarInfos(flugzeugId,flugzeugbesitzerId, result);
       })
       .onSuccess(result ->
         ctx.response()
@@ -1912,7 +1926,7 @@ public class MainVerticle extends VerticleBase {
 
   }
 
-  private Future<JsonObject> loadHangarInfos(UUID flugzeugId, JsonObject result) {
+  private Future<JsonObject> loadHangarInfos(UUID flugzeugId, UUID flugzeugbesitzerId, JsonObject result) {
 
     String sql = """
     SELECT
@@ -1953,15 +1967,13 @@ public class MainVerticle extends VerticleBase {
           .put("von", row.getLocalDate("von") != null ? row.getLocalDate("von").toString() : null)
           .put("bis", row.getLocalDate("bis") != null ? row.getLocalDate("bis").toString() : null)
           .put("services", new JsonArray())
-          .put("zusatzservices", new JsonArray())
-          .put("uebergabetermin",null)
-          .put("rueckgabetermin",null);
+          .put("zusatzservices", new JsonArray());
 
         result.put("hangar", hangar);
 
         return loadServices(stellplatzId, anbieterID, result)
           .compose(v -> loadZusatzservices(stellplatzId, flugzeugId, result))
-          .compose(v -> loadTermine(stellplatzId, anbieterID, result))
+          .compose(v -> loadTermine(stellplatzId,flugzeugbesitzerId, anbieterID, result))
           .compose(v -> loadZustand(flugzeugId, stellplatzId, result));
 
       });
@@ -2029,6 +2041,7 @@ public class MainVerticle extends VerticleBase {
         }
 
         result.put("zustand", zustand);
+        System.out.println(result);
         return result;
       });
   }
@@ -2076,6 +2089,7 @@ public class MainVerticle extends VerticleBase {
   private Future<Void> loadTermine(
     UUID stellplatzId,
     UUID flugzeugbesitzerID,
+    UUID anbieterID,
     JsonObject result
   ) {
 
@@ -2084,11 +2098,12 @@ public class MainVerticle extends VerticleBase {
     FROM uebergabe_rueckgabe_termin
     WHERE stellplatz_id = $1
       AND flugzeugbesitzer_id = $2
+      AND hangaranbieter_id = $3
   """;
 
     return client
       .preparedQuery(sql)
-      .execute(Tuple.of(stellplatzId, flugzeugbesitzerID))
+      .execute(Tuple.of(stellplatzId, flugzeugbesitzerID,anbieterID))
       .onSuccess(rows -> {
 
         JsonObject hangar = result.getJsonObject("hangar");
@@ -3143,6 +3158,165 @@ private void buchZusatzserviceHandler(RoutingContext ctx) {
             .encode());
       });
   }
+
+  //Übergabe/Rückgabetermin erfassen
+  private void createTerminHandler(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+
+    JsonObject body = ctx.body().asJsonObject();
+    if (body == null) {
+      ctx.response().setStatusCode(400).end("Request body fehlt");
+      return;
+    }
+
+    UUID hangaranbieterId;
+    UUID stellplatzId;
+    Boolean istUebergabe;
+    OffsetDateTime terminZeitpunkt;
+
+    try {
+      hangaranbieterId = UUID.fromString(body.getString("hangaranbieter_id"));
+      stellplatzId = UUID.fromString(body.getString("stellplatz_id"));
+      istUebergabe = body.getBoolean("ist_uebergabe");
+
+      // ISO-8601 → OffsetDateTime (timestamp with time zone)
+      terminZeitpunkt = OffsetDateTime.parse(body.getString("termin_zeitpunkt"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige Request-Daten");
+      return;
+    }
+
+    String sql = """
+    INSERT INTO uebergabe_rueckgabe_termin
+      (flugzeugbesitzer_id, hangaranbieter_id, stellplatz_id, termin_zeitpunkt, ist_uebergabe)
+    VALUES ($1, $2, $3, $4, $5)
+  """;
+
+    client
+      .preparedQuery(sql)
+      .execute(Tuple.of(
+        flugzeugbesitzerId,
+        hangaranbieterId,
+        stellplatzId,
+        terminZeitpunkt,
+        istUebergabe
+      ))
+      .onSuccess(res -> {
+        ctx.response()
+          .setStatusCode(201)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Termin erfolgreich erstellt")
+            .encode());
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler beim Speichern des Termins");
+      });
+  }
+
+  //Meine Termine
+  private void terminMeHandler(RoutingContext ctx) {
+
+    UUID benutzerId = UUID.fromString(ctx.user().principal().getString("sub"));
+    String rolle = ctx.user().principal().getString("rolle");
+
+    Future<UUID> idFuture;
+    String whereClause;
+
+    if ("FLUGZEUGBESITZER".equalsIgnoreCase(rolle)) {
+      idFuture = flugzeugbesitzerService.getFlugzeugbesitzerId(benutzerId);
+      whereClause = "WHERE t.flugzeugbesitzer_id = ?";
+    } else if ("HANGARANBIETER".equalsIgnoreCase(rolle)) {
+      idFuture = hangaranbieterService.getHAnbieterId(benutzerId);
+      whereClause = "WHERE t.hangaranbieter_id = ?";
+    } else {
+      ctx.response().setStatusCode(403).end("Unbekannte Rolle");
+      return;
+    }
+
+    String sql = """
+    SELECT
+      t.id AS termin_id,
+      t.ist_uebergabe,
+      t.termin_zeitpunkt,
+
+      s.id AS stellplatz_id,
+      s.kennzeichen AS stellplatz_kennzeichen,
+      s.standort,
+
+      f.id AS flugzeug_id,
+      f.kennzeichen AS flugzeug_kennzeichen,
+
+      fb.id AS flugzeugbesitzer_id,
+      b_fb.name AS flugzeugbesitzer_name,
+      b_fb.email AS flugzeugbesitzer_email,
+
+      h.id AS hangaranbieter_id,
+      h.firmenname
+
+    FROM uebergabe_rueckgabe_termin t
+    JOIN stellplatz s ON s.id = t.stellplatz_id
+    JOIN flugzeugbesitzer fb ON fb.id = t.flugzeugbesitzer_id
+    JOIN benutzer b_fb ON b_fb.id = fb.benutzer_id
+    JOIN hangaranbieter h ON h.id = t.hangaranbieter_id
+    JOIN flugzeug f ON f.flugzeugbesitzer_id = fb.id \n
+     %s \n
+    ORDER BY t.termin_zeitpunkt ASC
+  """.formatted(whereClause);
+
+    idFuture
+      .compose(metierId ->
+        client.preparedQuery(sql).execute(Tuple.of(metierId))
+      )
+      .onSuccess(rows -> {
+
+        JsonArray result = new JsonArray();
+
+        for (Row row : rows) {
+          JsonObject termin = new JsonObject()
+            .put("id", row.getUUID("termin_id").toString())
+            .put("is_uebergabe", row.getBoolean("ist_uebergabe"))
+            .put("termin_zeitpunkt",
+              row.getOffsetDateTime("termin_zeitpunkt").toString()
+            )
+            .put("stellplatz", new JsonObject()
+              .put("id", row.getUUID("stellplatz_id").toString())
+              .put("kennzeichen", row.getString("stellplatz_kennzeichen"))
+              .put("standort", row.getString("standort"))
+            )
+            .put("flugzeug", new JsonObject()
+              .put("id", row.getUUID("flugzeug_id").toString())
+              .put("kennzeichen", row.getString("flugzeug_kennzeichen"))
+            )
+            .put("flugzeugbesitzer", new JsonObject()
+              .put("id", row.getUUID("flugzeugbesitzer_id").toString())
+              .put("name", row.getString("flugzeugbesitzer_name"))
+              .put("email", row.getString("flugzeugbesitzer_email"))
+            )
+            .put("hangaranbieter", new JsonObject()
+              .put("id", row.getUUID("hangaranbieter_id").toString())
+              .put("firmenname", row.getString("firmenname"))
+            );
+
+          result.add(termin);
+        }
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(result.encode());
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response().setStatusCode(404).end(err.getMessage());
+      });
+  }
+
+
+
 
 
 

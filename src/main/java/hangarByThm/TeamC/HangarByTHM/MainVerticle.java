@@ -43,6 +43,7 @@ public class MainVerticle extends VerticleBase {
   private JWTAuth jwtAuth;
   private FlugzeugbesitzerService flugzeugbesitzerService;
   private HangaranbieterService hangaranbieterService;
+  private ZusatzserviceRepository zusatzserviceRepository;
 
   // The following snippet is only necessary if you want to start the server directly using IntelliJ
   public static void main(String[] args) {
@@ -103,6 +104,7 @@ public class MainVerticle extends VerticleBase {
 
     this.flugzeugbesitzerService = new FlugzeugbesitzerService(client);
     this.hangaranbieterService = new HangaranbieterService(client);
+    this.zusatzserviceRepository= new ZusatzserviceRepository(client);
 
 
 
@@ -183,10 +185,14 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::deleteAngeboteneServiceHandler);
-
+    //controller Hangaranbieter
     router.get("/api/hangaranbieter/zusatzservices")
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
+      .handler(this::getZusatzservicesHandler);
+
+    //Flugzeugbesitzer zugriff
+    router.get("/api/hangaranbieter/:id/zusatzservices")
       .handler(this::getZusatzservicesHandler);
 
     router.post("/api/hangaranbieter/zusatzservices")
@@ -202,6 +208,11 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::deleteZusatzserviceHandler);
+
+    router.post("/api/zusatzservices/buchen")
+      .handler(jwtAuthHandler)
+      .handler(this::buchZusatzserviceHandler);
+
 
     router.get("/api/hangaranbieter/reservierungen")
       .handler(jwtAuthHandler)
@@ -1041,33 +1052,26 @@ public class MainVerticle extends VerticleBase {
       .onFailure(err -> ctx.fail(500, err));
   }
 
+  //Hangaranbieter Controller
   private void getZusatzservicesHandler(RoutingContext ctx) {
+    UUID hangaranbieterId;
+    if (ctx.get("anbieterId")!=null){
+      hangaranbieterId= ctx.get("anbieterId");
+    }else{
+      hangaranbieterId= UUID.fromString(ctx.pathParam("id"));
+    }
 
-    UUID hangaranbieterId = ctx.get("anbieterId");
 
-    String sql = """
-    SELECT *
-    FROM zusatzservice
-    WHERE hangaranbieter_id = $1
-  """;
-
-    client
-      .preparedQuery(sql)
-      .execute(Tuple.of(hangaranbieterId))
-      .onSuccess(rows -> {
-
-        JsonArray result = new JsonArray();
-
-        rows.forEach(row ->
-          result.add(Zusatzservice.fromRow(row).toJson())
-        );
-
-        ctx.response()
-          .putHeader("Content-Type", "application/json")
-          .end(result.encode());
-      })
+    zusatzserviceRepository
+      .findByHangaranbieterId(hangaranbieterId)
+      .onSuccess(services -> ctx.response()
+        .putHeader("Content-Type", "application/json")
+        .end(services.encode())
+      )
       .onFailure(err -> ctx.fail(500, err));
   }
+
+  //Flugzeugbesitzer Zugriff
 
   private void getStellplatzInfosHandler(RoutingContext ctx) {
 
@@ -1510,13 +1514,22 @@ public class MainVerticle extends VerticleBase {
         }
 
         Row row = rows.iterator().next();
+        UUID anbieterId = row.getUUID("anbieter_id");
 
-        JsonObject response = buildStellplatzDetailJson(row);
 
-        ctx.response()
-          .putHeader("Content-Type", "application/json")
-          .setStatusCode(200)
-          .end(response.encode());
+        zusatzserviceRepository
+          .findByHangaranbieterId(anbieterId)
+          .onSuccess(zusatzservices -> {
+
+            JsonObject response = buildStellplatzDetailJson(row)
+              .put("zusatzservices", zusatzservices);
+
+            ctx.response()
+              .putHeader("Content-Type", "application/json")
+              .end(response.encode());
+          })
+          .onFailure(err -> ctx.fail(500, err));
+
       });
   }
   private JsonObject buildStellplatzDetailJson(Row row) {
@@ -1940,16 +1953,17 @@ public class MainVerticle extends VerticleBase {
           .put("von", row.getLocalDate("von") != null ? row.getLocalDate("von").toString() : null)
           .put("bis", row.getLocalDate("bis") != null ? row.getLocalDate("bis").toString() : null)
           .put("services", new JsonArray())
+          .put("zusatzservices", new JsonArray())
           .put("uebergabetermin",null)
           .put("rueckgabetermin",null);
 
         result.put("hangar", hangar);
 
-        // Termin Tabelle noch nicht vorhanden:
-        // SPÄTER: loadTermin(stellplatzId, flugzeugId)
-
         return loadServices(stellplatzId, anbieterID, result)
+          .compose(v -> loadZusatzservices(stellplatzId, flugzeugId, result))
+          .compose(v -> loadTermine(stellplatzId, anbieterID, result))
           .compose(v -> loadZustand(flugzeugId, stellplatzId, result));
+
       });
   }
 
@@ -2018,6 +2032,83 @@ public class MainVerticle extends VerticleBase {
         return result;
       });
   }
+  private Future<Void> loadZusatzservices(
+    UUID stellplatzId,
+    UUID flugzeugId,
+    JsonObject result
+  ) {
+
+    String sql = """
+    SELECT
+      zs.id,
+      zs.bezeichnung,
+      zs.preis,
+      zs.einheit
+    FROM gebuchter_zusatzservice gzs
+    JOIN zusatzservice zs ON zs.id = gzs.zusatzservice_id
+    WHERE gzs.stellplatz_id = $1
+      AND gzs.flugzeug_id = $2
+  """;
+
+    return client
+      .preparedQuery(sql)
+      .execute(Tuple.of(stellplatzId, flugzeugId))
+      .onSuccess(rows -> {
+
+        JsonArray zusatzservices = new JsonArray();
+
+        rows.forEach(row -> {
+          zusatzservices.add(new JsonObject()
+            .put("id", row.getInteger("id"))
+            .put("bezeichnung", row.getString("bezeichnung"))
+            .put("preis", row.getBigDecimal("preis").doubleValue())
+            .put("einheit", row.getString("einheit"))
+          );
+        });
+
+        result
+          .getJsonObject("hangar")
+          .put("zusatzservices", zusatzservices);
+      })
+      .mapEmpty();
+  }
+
+  private Future<Void> loadTermine(
+    UUID stellplatzId,
+    UUID flugzeugbesitzerID,
+    JsonObject result
+  ) {
+
+    String sql = """
+    SELECT termin_zeitpunkt, ist_uebergabe
+    FROM uebergabe_rueckgabe_termin
+    WHERE stellplatz_id = $1
+      AND flugzeugbesitzer_id = $2
+  """;
+
+    return client
+      .preparedQuery(sql)
+      .execute(Tuple.of(stellplatzId, flugzeugbesitzerID))
+      .onSuccess(rows -> {
+
+        JsonObject hangar = result.getJsonObject("hangar");
+
+        rows.forEach(row -> {
+          String termin = row
+            .getOffsetDateTime("termin_zeitpunkt")
+            .toString();
+
+          if (row.getBoolean("ist_uebergabe")) {
+            hangar.put("uebergabetermin", termin);
+          } else {
+            hangar.put("rueckgabetermin", termin);
+          }
+        });
+      })
+      .mapEmpty();
+  }
+
+
 
   //create Service
   private void createAngeboteneServicesHandler(RoutingContext ctx) {
@@ -2164,6 +2255,62 @@ public class MainVerticle extends VerticleBase {
           .end("Fehler beim Löschen des Services");
       });
   }
+
+// Zusatzservice buchen
+private void buchZusatzserviceHandler(RoutingContext ctx) {
+
+  JsonObject body = ctx.body().asJsonObject();
+  if (body == null) {
+    ctx.response().setStatusCode(400).end("Body fehlt");
+    return;
+  }
+
+  UUID stellplatzId;
+  UUID flugzeugId;
+  Integer zusatzserviceId;
+
+  try {
+    stellplatzId = UUID.fromString(body.getString("stellplatz_id"));
+    flugzeugId = UUID.fromString(body.getString("flugzeug_id"));
+    zusatzserviceId = body.getInteger("zusatzservice_id");
+  } catch (Exception e) {
+    ctx.response().setStatusCode(400).end("invalid Payload");
+    return;
+  }
+
+  String sql = """
+    INSERT INTO gebuchter_zusatzservice (
+      stellplatz_id,
+      zusatzservice_id,
+      flugzeug_id
+    )
+    VALUES ($1, $2, $3)
+  """;
+
+  client
+    .preparedQuery(sql)
+    .execute(Tuple.of(stellplatzId, zusatzserviceId, flugzeugId))
+    .onSuccess(res -> {
+      ctx.response()
+        .setStatusCode(201)
+        .end();
+    })
+    .onFailure(err -> {
+
+      // UNICITY
+      if (err.getMessage() != null && err.getMessage().contains("unique")) {
+        ctx.response()
+          .setStatusCode(409)
+          .end("Zusatzservice bereits gebucht");
+        return;
+      }
+
+      err.printStackTrace();
+      ctx.response()
+        .setStatusCode(500)
+        .end("Fehler beim Buchen des Zusatzservices");
+    });
+}
 
 
   //create Zusatzservice

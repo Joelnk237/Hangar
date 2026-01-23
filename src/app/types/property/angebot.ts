@@ -1,7 +1,7 @@
 export type Angebot = {
     id: number,
-    accepted:boolean,
-    inhalt: string,
+    accepted:boolean | null,
+    inhalt: string | null,
     stellplatz:{
         id: string;
         kennzeichen: string;

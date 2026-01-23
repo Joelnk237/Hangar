@@ -16,7 +16,7 @@ const headerDataHAnbieter = [
     label: "Anfragen",
     href: "#",
     submenu: [
-      { label: "Angebotsanfragen", href: "anfragen/angebote" },
+      { label: "Angebotsanfragen", href: "/angebote/hangaranbieter" },
       { label: "Reparaturanfragen", href: "#" },
       { label: "Wartungsanfragen", href: "#" },
     ],
@@ -38,7 +38,7 @@ const headerDataFBesitzer = [
   { label: "Stellplatzsuche", href: "/properties/properties-list" },
   { label: "Flugzeuge", href: "/flugzeuge" },
   { label: "Anfragen", href: "#" },
-  { label: "Angebote", href: "#" },
+  { label: "Angebote", href: "/angebote/flugzeugbesitzer" },
   { label: "Nachrichten", href: "/nachrichten" }, 
 ];
 

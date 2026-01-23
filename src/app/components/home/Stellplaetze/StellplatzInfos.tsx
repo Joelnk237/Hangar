@@ -3,12 +3,16 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { Flugzeug } from "@/app/types/property/flugzeug";
+import { useRouter } from "next/navigation";
 
 import { StellplatzInfosProps } from "@/app/types/property/stellplatzData";
+import toast, { Toaster } from 'react-hot-toast';
 
 const StellplatzInfos = ({ stellplatz }: { stellplatz: StellplatzInfosProps }) => {
+  const router= useRouter();
   const [showFlugzeugModal, setShowFlugzeugModal] = useState(false);
   const [showDateModal, setShowDateModal] = useState(false);
+  const [isReservierung, setIsReservierung] = useState(false);
 
   const [flugzeuge, setFlugzeuge] = useState<Flugzeug[]>([]);
   const [selectedFlugzeugId, setSelectedFlugzeugId] = useState<string | null>(null);
@@ -19,6 +23,7 @@ const StellplatzInfos = ({ stellplatz }: { stellplatz: StellplatzInfosProps }) =
 
 
   const handleBuchenClick = async () => {
+    setIsReservierung(true);
   try {
     const token = localStorage.getItem("token");
 
@@ -42,6 +47,68 @@ const StellplatzInfos = ({ stellplatz }: { stellplatz: StellplatzInfosProps }) =
     console.error(err);
   }
 
+};
+
+const handleAngebotsanfrageClick = async () => {
+  setIsReservierung(false);
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch("http://localhost:8888/api/flugzeuge", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) throw new Error("Fehler beim Laden der Flugzeuge");
+
+    const data: Flugzeug[] = await res.json();
+
+    // nur freie Flugzeuge
+    const freieFlugzeuge = data.filter(f => !f.status);
+
+    setFlugzeuge(freieFlugzeuge);
+    setShowFlugzeugModal(true);
+
+  } catch (err) {
+    console.error(err);
+    console.log("ECHEC DE LA REQUETE")
+    toast.error("Flugzeuge konnten nicht geladen werden");
+  }
+
+};
+
+const handleConfirmAngebotsanfrage = async () => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const payload = {
+      flugzeug_id: selectedFlugzeugId,
+      stellplatz_id: stellplatz.id,
+      hangaranbieter_id: stellplatz.anbieterId,
+      von,
+      bis,
+    };
+
+    const res = await fetch("http://localhost:8888/api/angebote", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) throw new Error("Anfrage fehlgeschlagen");
+
+    toast.success("Angebotsanfrage erfolgreich abgeschickt !");
+    setShowDateModal(false);
+    router.push("/");
+
+  } catch (err) {
+    console.error(err);
+    toast.error("Fehler beim Zusenden der Angebotsanfrage");
+  }
 };
 
 const handleConfirmReservation = async () => {
@@ -68,12 +135,13 @@ const handleConfirmReservation = async () => {
 
     if (!res.ok) throw new Error("Reservierung fehlgeschlagen");
 
-    alert("Stellplatz erfolgreich reserviert!");
+    toast.success("Stellplatz erfolgreich reserviert!");
     setShowDateModal(false);
+    router.push("/");
 
   } catch (err) {
     console.error(err);
-    alert("Fehler bei der Reservierung");
+    toast.error("Fehler bei der Reservierung");
   }
 };
 
@@ -166,6 +234,7 @@ const handleConfirmReservation = async () => {
         {/* Actions */}
         <div className="flex flex-wrap gap-4 justify-end pt-4 border-t">
           <button
+            onClick={handleAngebotsanfrageClick}
             className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             Angebot anfordern
@@ -239,7 +308,7 @@ const handleConfirmReservation = async () => {
     <div className="bg-gray rounded-lg p-6 w-full max-w-md space-y-4">
 
       <h2 className="text-lg font-semibold">
-        Reservierungszeitraum auswählen
+        {isReservierung?"Reservierungszeitraum":"Gewünschter Zeitraum"} auswählen
       </h2>
 
       <div className="flex flex-col gap-2">
@@ -271,13 +340,18 @@ const handleConfirmReservation = async () => {
         >
           Abbrechen
         </button>
-
-        <button
+        {isReservierung ? (<button
           onClick={handleConfirmReservation}
           className="px-3 py-1 bg-blue-600 text-white rounded"
         >
           Reservieren
-        </button>
+        </button>):(<button
+          onClick={handleConfirmAngebotsanfrage}
+          className="px-3 py-1 bg-blue-600 text-white rounded"
+        >
+          Abschicken
+        </button>)}
+        
       </div>
 
     </div>

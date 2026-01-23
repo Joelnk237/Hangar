@@ -63,6 +63,11 @@ const Reservierungen = ({ reservierungen }: Props) => {
 
     if (reservierungen.length === 0) {
         return (
+                  <div className="pt-24 pb-32 h-[95vh] bg-light dark:bg-darkmode">
+            <div className="pt-11 flex justify-center items-center text-center ">
+       
+                <div className="max-w-6xl w-full bg-white dark:bg-semidark px-8 py-14 sm:px-12 md:px-16 rounded-lg">
+                    <div className='lg:max-w-screen-xl max-w-screen-md mx-auto'>
         <div className="flex flex-col gap-5 items-center justify-center pt-20">
             <Image
             src="/images/not-found/no-results.png"
@@ -71,7 +76,7 @@ const Reservierungen = ({ reservierungen }: Props) => {
             height={100}
             />
             <p className="text-gray">Keine Reservierung vorhanden</p>
-        </div>
+        </div></div></div></div></div>
         );
   }
     

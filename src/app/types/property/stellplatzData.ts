@@ -50,6 +50,15 @@ export type StellplatzInfosProps = {
 
     merkmale: Merkmale;
     services: Services;
+    zusatzservices:
+    {
+      id: number;
+      bezeichnung: string;
+      beschreibung: string;
+      preis: number;
+      einheit: string,
+    }[],
     besonderheiten: string;
+
  // };
 };

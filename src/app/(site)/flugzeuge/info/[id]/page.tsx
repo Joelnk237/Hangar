@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import FlugzeugInfo from '@/app/components/flugzeuge/FlugzeugInfo';
 import Loader from '@/app/components/shared/Loader';
 import { FlugzeugInfoProps } from "@/app/types/property/flugzeug";
-import { authFetch } from '@/utils/lib/authFetch';
 
 
 const Page = ({ params }: { params: { id: string } }) => {

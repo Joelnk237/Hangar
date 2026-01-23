@@ -152,7 +152,7 @@ const handleConfirmReservation = async () => {
   return (
     <>
     <div className="pt-20 pb-32 bg-light dark:bg-darkmode">
-      <div className="pt-11 flex justify-center items-center text-center ">
+      <div className="pt-11 flex justify-center items-center">
         <div className="max-w-4xl w-full bg-white dark:bg-semidark px-8 py-14 sm:px-12 md:px-16 rounded-lg">
     <div className="bg-white dark:bg-semidark rounded-lg overflow-hidden shadow-md">
 
@@ -185,7 +185,7 @@ const handleConfirmReservation = async () => {
 
         {/* Merkmale */}
         <div>
-          <h3 className="font-semibold mb-6 text-midnight_text dark:mb-2">Einstellbedingungen:</h3>
+          <h4 className="font-semibold mb-6 text-midnight_text dark:mb-2">Einstellbedingungen:</h4>
           <ul className="list-disc list-inside space-y-1">
             {Object.entries(stellplatz.merkmale)
               .filter(([_, m]) => m.enabled)
@@ -204,7 +204,7 @@ const handleConfirmReservation = async () => {
 
         {/* Services */}
         <div>
-          <h3 className="font-semibold dark:mb-2 mb-6 text-midnight_text">Services am Stellplatz:</h3>
+          <h4 className="font-semibold dark:mb-2 mb-6 text-midnight_text">Services am Stellplatz:</h4>
           <ul className="space-y-1">
             {Object.entries(stellplatz.services).map(([name, s]) => (
               <li key={name} className="flex justify-between">
@@ -219,13 +219,22 @@ const handleConfirmReservation = async () => {
 
         {/* Availability */}
         <div>
-          <span className="font-semibold">verfügbar ab: </span>
-          <span>{new Date(stellplatz.availability).toLocaleDateString()}</span>
+          <h4 className="font-semibold dark:mb-2 mb-6 text-midnight_text">Zusatzservices</h4>(erst nach Reservierung buchbar)
+          <ul className="space-y-1">
+            {Object.entries(stellplatz.zusatzservices).map(([name, s]) => (
+              <li key={name} className="flex justify-between">
+                <span className="capitalize">{s.bezeichnung}</span>
+                <span className="text-gray-600">
+                  {s.preis} € / {s.einheit}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
 
         {/* Besonderheiten */}
         <div>
-          <h3 className="font-semibold mb-6 text-midnight_text dark:mb-2">Besonderheiten</h3>
+          <h4 className="font-semibold mb-6 text-midnight_text dark:mb-2">Besonderheiten</h4>
           <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
             {stellplatz.besonderheiten || "Keine Besonderheiten angegeben."}
           </p>

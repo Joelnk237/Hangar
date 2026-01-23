@@ -59,6 +59,12 @@ export type FlugzeugInfoProps = {
       preis: number;
       einheit: string;
     }[];
+    zusatzservices: {
+      id:string;
+      bezeichnung:string;
+      preis: number;
+      einheit: string;
+    }[];
     von: string;
     bis: string;
     uebergabetermin: string;

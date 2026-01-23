@@ -1,6 +1,7 @@
 "use client";
 import { FlugzeugInfoProps } from "@/app/types/property/flugzeug";
-
+import { useState } from "react";
+import toast from "react-hot-toast";
 
 const Section = ({
   title,
@@ -49,8 +50,91 @@ const LabelValue = ({ label, value }: { label: string; value: any }) => (
 
 const FlugzeugInfo = ({ flugzeugInfos }: { flugzeugInfos: FlugzeugInfoProps }) => {
 
+  const [showZusatzModal, setShowZusatzModal] = useState(false);
+  const [loadingZusatz, setLoadingZusatz] = useState(false);
+  const [zusatzservices, setZusatzservices] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+
+  const handleOpenZusatzservices = async () => {
+  setShowZusatzModal(true);
+  setLoadingZusatz(true);
+  setError(null);
+
+  try {
+
+    const res = await fetch(
+      `http://localhost:8888/api/hangaranbieter/${flugzeugInfos.hangar.hangaranbieterId}/zusatzservices`,
+      {}
+    );
+
+    if (!res.ok) {
+      throw new Error("Fehler beim Laden der Zusatzservices");
+    }
+
+    const allServices = await res.json();
+
+    // IDs von schon gebuchten Zusatzservices
+    const bookedIds = new Set(
+      flugzeugInfos.hangar.zusatzservices.map(z => z.id)
+    );
+
+    // filtern
+    const available = allServices.filter(
+      (s: any) => !bookedIds.has(s.id)
+    );
+
+    setZusatzservices(available);
+  } catch (err: any) {
+    console.error(err);
+    setError(err.message);
+    toast.error(err.message);
+  } finally {
+    setLoadingZusatz(false);
+  }
+};
+
+const handleBookZusatzservice = async (zusatzserviceId: number) => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const payload = {
+      zusatzservice_id: zusatzserviceId,
+      stellplatz_id: flugzeugInfos.hangar.stellplatz_id,
+      flugzeug_id: flugzeugInfos.flugzeug.id,
+    };
+
+    const res = await fetch(
+      "http://localhost:8888/api/zusatzservices/buchen",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Buchung fehlgeschlagen");
+    }
+
+    setShowZusatzModal(false);
+    toast.success("Zusatzservice erfolgreich gebucht!")
+    window.location.reload(); // reloading
+  } catch (err) {
+    console.error(err);
+    toast.error("Fehler bei der Buchung");
+  }
+};
+
+
+
+
   const hasStellplatz = flugzeugInfos.flugzeug.status === true;
   return (
+  <>
     <div className="pt-20 pb-32 bg-light dark:bg-darkmode">
       <div className="pt-11 flex justify-center items-center text-center ">
         <div className="max-w-4xl w-full bg-white dark:bg-semidark px-8 py-14 sm:px-12 md:px-16 rounded-lg">
@@ -118,7 +202,18 @@ const FlugzeugInfo = ({ flugzeugInfos }: { flugzeugInfos: FlugzeugInfoProps }) =
                         >
                           <span>{service.bezeichnung}</span>
                           <span className="text-gray-500 dark:text-gray-400">
-                            {service.preis} {service.einheit}
+                            {service.preis}€ {service.einheit}
+                          </span>
+                        </li>
+                      ))}
+                      {flugzeugInfos.hangar.zusatzservices.map((service, index) => (
+                        <li
+                          key={index}
+                          className="flex justify-between gap-6 border-b border-gray-200 dark:border-gray-700 pb-1"
+                        >
+                          <span>{service.bezeichnung}</span>
+                          <span className="text-gray-500 dark:text-gray-400">
+                            {service.preis}€ {service.einheit}
                           </span>
                         </li>
                       ))}
@@ -149,6 +244,7 @@ const FlugzeugInfo = ({ flugzeugInfos }: { flugzeugInfos: FlugzeugInfoProps }) =
 
         <div className="flex justify-end gap-3">
           <button
+            onClick={handleOpenZusatzservices}
             className="px-4 py-2 rounded border border-primary text-primary hover:bg-primary hover:text-white transition"
           >
             Zusatzservice buchen
@@ -186,6 +282,64 @@ const FlugzeugInfo = ({ flugzeugInfos }: { flugzeugInfos: FlugzeugInfoProps }) =
     </div>
     </div>
     </div>
+    
+    {/**MODAL */}
+
+    {showZusatzModal && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white dark:bg-semidark rounded-lg p-6 w-full max-w-lg space-y-4">
+
+      <h2 className="text-lg font-semibold">
+        Zusatzservice auswählen
+      </h2>
+
+      {loadingZusatz && (
+        <p className="text-gray-500">Lade Zusatzservices…</p>
+      )}
+
+      {error && (
+        <p className="text-red-500 text-sm">{error}</p>
+      )}
+
+      {!loadingZusatz && zusatzservices.length === 0 && (
+        <p className="text-gray-500 italic">
+          Keine zusätzlichen Services verfügbar
+        </p>
+      )}
+
+      <ul className="space-y-3 max-h-80 overflow-y-auto">
+        {zusatzservices.map((s) => (
+          <li
+            key={s.id}
+            className="border rounded p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+            onClick={() => handleBookZusatzservice(s.id)}
+          >
+            <div className="font-medium">{s.bezeichnung}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              {s.beschreibung}
+            </div>
+            <div className="text-sm mt-1">
+              {s.preis} € / {s.einheit}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div className="flex justify-end">
+        <button
+          onClick={() => setShowZusatzModal(false)}
+          className="px-4 py-2 border rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+        >
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+    
+    
+    </>
   );
 };
 

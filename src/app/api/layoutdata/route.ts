@@ -25,7 +25,7 @@ const headerDataHAnbieter = [
     label: "Termine",
     href: "#",
     submenu: [
-      { label: "Abhol-/ Rückgabe Termine", href: "#" },
+      { label: "Abhol-/ Rückgabe Termine", href: "/termine" },
       { label: "Werkstatt-termin", href: "#" },
     ],
   },

@@ -13,7 +13,14 @@ type Props = {
 };
 const Termine = ({ termine }: Props) => {
     
+const formatTermin = (isoString: string) => {
+  const date = new Date(isoString);
 
+  return date.toLocaleString("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+};
 
     if (termine.length === 0) {
         return (
@@ -64,11 +71,11 @@ const Termine = ({ termine }: Props) => {
                         className="grid grid-cols-8 gap-2 border-b py-2"
                     >
                     <div>{r.is_uebergabe?"Übergabetermin":"Rückgabetermin"}</div>
-                    <div>{r.termin_zeitpunkt}</div>
+                    <div className="whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto pr-2">{formatTermin(r.termin_zeitpunkt)}</div>
                     <div>{r.stellplatz.kennzeichen}</div>
                     <div>{r.stellplatz.standort}</div>
-                    <div>{r.flugzeugbesitzer.name}</div>
-                    <div>{r.flugzeugbesitzer.email}</div>
+                    <div className="whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto pr-2">{r.flugzeugbesitzer.name}</div>
+                    <div className="whitespace-pre-wrap break-words max-h-[120px] overflow-y-auto pr-2">{r.flugzeugbesitzer.email}</div>
                     <div>{r.flugzeug.kennzeichen}</div>
                     <div>
                     </div>

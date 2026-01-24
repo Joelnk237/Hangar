@@ -3229,17 +3229,17 @@ private void buchZusatzserviceHandler(RoutingContext ctx) {
 
     if ("FLUGZEUGBESITZER".equalsIgnoreCase(rolle)) {
       idFuture = flugzeugbesitzerService.getFlugzeugbesitzerId(benutzerId);
-      whereClause = "WHERE t.flugzeugbesitzer_id = ?";
+      whereClause = " WHERE t.flugzeugbesitzer_id = $1";
     } else if ("HANGARANBIETER".equalsIgnoreCase(rolle)) {
       idFuture = hangaranbieterService.getHAnbieterId(benutzerId);
-      whereClause = "WHERE t.hangaranbieter_id = ?";
+      whereClause = " WHERE t.hangaranbieter_id = $1";
     } else {
       ctx.response().setStatusCode(403).end("Unbekannte Rolle");
       return;
     }
 
     String sql = """
-    SELECT
+    SELECT DISTINCT ON (t.id)
       t.id AS termin_id,
       t.ist_uebergabe,
       t.termin_zeitpunkt,
@@ -3263,10 +3263,14 @@ private void buchZusatzserviceHandler(RoutingContext ctx) {
     JOIN flugzeugbesitzer fb ON fb.id = t.flugzeugbesitzer_id
     JOIN benutzer b_fb ON b_fb.id = fb.benutzer_id
     JOIN hangaranbieter h ON h.id = t.hangaranbieter_id
-    JOIN flugzeug f ON f.flugzeugbesitzer_id = fb.id \n
+    JOIN flugzeug f ON f.flugzeugbesitzer_id = fb.id
      %s \n
-    ORDER BY t.termin_zeitpunkt ASC
+    ORDER BY t.id, t.termin_zeitpunkt ASC
   """.formatted(whereClause);
+    System.out.println(sql);
+    System.out.println(benutzerId);
+    System.out.println(rolle);
+    System.out.println(idFuture.toString());
 
     idFuture
       .compose(metierId ->

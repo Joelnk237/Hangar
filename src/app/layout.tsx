@@ -8,6 +8,7 @@ import { AppContextProvider } from "../context-api/PropertyContext";
 import Footer from "./components/layout/footer";
 import ScrollToTop from "./components/scroll-to-top";
 import Header from "./components/layout/header";
+import { Toaster } from "react-hot-toast";
 //import SessionProviderComp from "./provider/SessionProviderComp";
 
 export default function RootLayout({
@@ -28,6 +29,7 @@ export default function RootLayout({
           defaultTheme="light"
         >
           <Aoscompo>
+            <Toaster/>
             <Header />
             <NextTopLoader />
             {children}

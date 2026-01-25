@@ -3,6 +3,7 @@ import { FlugzeugInfoProps } from "@/app/types/property/flugzeug";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Edit } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const Section = ({
   title,
@@ -61,6 +62,7 @@ const [terminDate, setTerminDate] = useState("");
 const [terminTime, setTerminTime] = useState("");
 const [istUebergabe, setIstUebergabe] = useState<boolean>(true);
 const [terminLoading, setTerminLoading] = useState(false);
+const router=useRouter();
 
 
 
@@ -205,7 +207,7 @@ const formatTermin = (isoString: string) => {
 
 
 
-  const hasStellplatz = flugzeugInfos.flugzeug.status === true;
+  const hasStellplatz = flugzeugInfos.flugzeug.status === true; 
   return (
   <>
     <div className="pt-20 pb-32 bg-light dark:bg-darkmode">
@@ -223,7 +225,7 @@ const formatTermin = (isoString: string) => {
           <LabelValue label="Flugzeuggröße:" value={flugzeugInfos.flugzeug.flugzeuggroesse} />
           <LabelValue label="Flugstunden:" value={flugzeugInfos.flugzeug.flugstunden} />
           <LabelValue label="Flugkilometer:" value={flugzeugInfos.flugzeug.flugkilometer} />
-          <LabelValue label="Abmaße:" value={flugzeugInfos.flugzeug.abmasse != null?`Flügelspannweite:${flugzeugInfos.flugzeug.abmasse.fluegelspannweite}, Länge:${flugzeugInfos.flugzeug.abmasse.laenge}, Höhe::${flugzeugInfos.flugzeug.abmasse.hoehe}` : null} />
+          <LabelValue label="Abmaße:" value={flugzeugInfos.flugzeug.abmasse != null?`${flugzeugInfos.flugzeug.abmasse.fluegelspannweite}m / ${flugzeugInfos.flugzeug.abmasse.laenge}m / ${flugzeugInfos.flugzeug.abmasse.hoehe} m` : null} />
           <LabelValue label="Kategorie:" value={null} />
           <LabelValue
             label="Treibstoffverbrauch:"
@@ -237,14 +239,11 @@ const formatTermin = (isoString: string) => {
 
         <div className="flex justify-end gap-3">
           <button
-            className="px-4 py-2 rounded border border-primary text-primary hover:bg-primary hover:text-white transition"
+            onClick={() => router.push(`/flugzeuge/${flugzeugInfos.flugzeug.id}`)}
+            className="p-2 rounded-lg bg-yellow-100 text-yellow-600 hover:bg-yellow-500 hover:text-white transition"
+            title="bearbeiten"
           >
-            bearbeiten
-          </button>
-          <button
-            className="px-4 py-2 rounded border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition"
-          >
-            löschen
+            <Edit size={18}/>
           </button>
         </div>
       </Section>
@@ -257,16 +256,16 @@ const formatTermin = (isoString: string) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <LabelValue
             label="Stellplatz:"
-            value={flugzeugInfos.hangar.stellplatzKennzeichen}
+            value={hasStellplatz?flugzeugInfos.hangar.stellplatzKennzeichen:""}
           />
           <LabelValue
             label="Hangaranbieter:"
-            value={flugzeugInfos.hangar.hangaranbieter}
+            value={hasStellplatz?flugzeugInfos.hangar.hangaranbieter:""}
           />
-          <LabelValue label="Ort:" value={flugzeugInfos.hangar.ort} />
+          <LabelValue label="Ort:" value={hasStellplatz?flugzeugInfos.hangar.ort:""} />
           <LabelValue
             label="Services:"
-            value={flugzeugInfos.hangar.services.length > 0 ? (
+            value={(hasStellplatz && (flugzeugInfos.hangar.services.length > 0)) ? (
                     <ul className="space-y-1">
                       {flugzeugInfos.hangar.services.map((service, index) => (
                         <li
@@ -299,15 +298,15 @@ const formatTermin = (isoString: string) => {
           />
           <LabelValue
             label="reserviert von:"
-            value={flugzeugInfos.hangar.von}
+            value={hasStellplatz?flugzeugInfos.hangar.von:""}
           />
           <LabelValue
             label="bis:"
-            value={flugzeugInfos.hangar.bis}
+            value={hasStellplatz?flugzeugInfos.hangar.bis:""}
           />
           <LabelValue
             label="Übergabetermin:"
-            value={flugzeugInfos.hangar.uebergabetermin != null ? formatTermin(flugzeugInfos.hangar.uebergabetermin) 
+            value={(hasStellplatz && (flugzeugInfos.hangar.uebergabetermin != null)) ? formatTermin(flugzeugInfos.hangar.uebergabetermin) 
               : (<button onClick={() => {
                   setIstUebergabe(true);
                   setShowTerminModal(true);
@@ -317,7 +316,7 @@ const formatTermin = (isoString: string) => {
           />
           <LabelValue
             label="Rückgabetermin:"
-            value={flugzeugInfos.hangar.rueckgabetermin!= null ? formatTermin(flugzeugInfos.hangar.rueckgabetermin) 
+            value={(hasStellplatz && (flugzeugInfos.hangar.rueckgabetermin!= null)) ? formatTermin(flugzeugInfos.hangar.rueckgabetermin) 
               : (<button onClick={() => {
               setIstUebergabe(false);
               setShowTerminModal(true);
@@ -350,15 +349,15 @@ const formatTermin = (isoString: string) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <LabelValue
             label="Fahrbereitschaft:"
-            value={flugzeugInfos.zustand.fahrbereitschaft}
+            value={hasStellplatz?flugzeugInfos.zustand.fahrbereitschaft:""}
           />
           <LabelValue
             label="Beschreibung:"
-            value={flugzeugInfos.zustand.beschreibung}
+            value={hasStellplatz?flugzeugInfos.zustand.beschreibung:""}
           />
           <LabelValue
             label="Wartungszustand:"
-            value={flugzeugInfos.zustand.wartungszustand}
+            value={hasStellplatz?flugzeugInfos.zustand.wartungszustand:""}
           />
         </div>
       </Section>

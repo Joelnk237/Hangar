@@ -4,9 +4,12 @@ import FlugzeugInfo from '@/app/components/flugzeuge/FlugzeugInfo';
 import Loader from '@/app/components/shared/Loader';
 import { FlugzeugInfoProps } from "@/app/types/property/flugzeug";
 
-
-const Page = ({ params }: { params: { id: string } }) => {
-    const { id } = params;
+type PageProps = {
+  params: Promise<{ id: string }>;
+};
+const Page = ({ params }: PageProps) => { {/* { params }: { params: { id: string } } */}
+    //const { id } = params;
+    const { id } = React.use(params);
 
   const [flugzeugInfosFromDB, setFlugzeugInfos] = useState<FlugzeugInfoProps | null>(null);
   const [loading, setLoading] = useState(true);

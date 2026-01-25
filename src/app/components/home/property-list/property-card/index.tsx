@@ -5,59 +5,70 @@ import "../../../../style/index.css";
 import { Eye, Edit, Trash2 } from "lucide-react";
 import { Flugzeug } from "@/app/types/property/flugzeug";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+import toast, {Toaster} from "react-hot-toast";
 
 
 interface PropertyCardProps {
   property: Flugzeug;
   viewMode?: string;
+  onDeleted?: (id: string) => void;
 }
 
-const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => {
+const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode, onDeleted }) => {
   const router = useRouter();
+
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
   
   
   const handleDelete = async (e: React.MouseEvent) => {
-  e.preventDefault();
+e.preventDefault();
 
-  if (property.status) {
-    alert("Dieses Flugzeug ist aktuell einem Stellplatz zugeordnet und kann nicht gelöscht werden.");
-    return;
-  }
-
-  const confirmed = confirm(
-    "Möchten Sie dieses Flugzeug wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden."
-  );
-
-  if (!confirmed) return;
-
-  try {
-    const token = localStorage.getItem("token");
-
-    const res = await fetch(
-      `http://localhost:8888/api/flugzeuge/${property.id}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (!res.ok) {
-      throw new Error("Löschen fehlgeschlagen");
+    if (property.status) {
+      toast.error("Dieses Flugzeug ist aktuell einem Stellplatz zugeordnet und kann nicht gelöscht werden.");
+      setShowModal(false);
+      setLoading(false);
+      return;
     }
 
-    alert("Flugzeug erfolgreich gelöscht");
+    setShowModal(true);
+  };
 
-    //  reload
-    window.location.reload();
+  const confirmDelete = async () => {
+    setLoading(true);
 
-  } catch (err: any) {
-    alert(err.message || "Fehler beim Löschen");
-  }
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(
+        `http://localhost:8888/api/flugzeuge/${property.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const text = await res.text();
+
+      if (!res.ok) {
+        throw new Error(text || "Löschen fehlgeschlagen");
+      }
+
+      toast.success("Flugzeug erfolgreich gelöscht");
+      setShowModal(false);
+      onDeleted?.(property.id);
+
+    } catch (err: any) {
+      toast.error(err.message || "Fehler beim Löschen");
+    } finally {
+      setLoading(false);
+    }
 };
 const handleEdit = (e: React.MouseEvent) => {
-  e.preventDefault(); // empêche le Link parent
+  e.preventDefault(); // 
   router.push(`/flugzeuge/edit/${property.id}`);
 };
 const handleConsult = (e: React.MouseEvent) => {
@@ -67,12 +78,15 @@ const handleConsult = (e: React.MouseEvent) => {
 
   
   return (
+  <>
     <div
       key={property.id}
       className={`bg-white shadow-property dark:bg-darklight rounded-lg overflow-hidden`}
       data-aos="fade-up"
     >
-      <Link href={``} className={`group ${viewMode=="list" && 'flex' }`}>
+      
+      <Link href={`/flugzeuge/info/${property.id}`} className={`group ${viewMode=="list" && 'flex' }`}>
+      
         <div className={`relative ${viewMode=="list" && 'w-[30%]'}`}>
           <div className={`imageContainer h-[250px] w-full ${viewMode =="list" && 'h-full md:h-52'}`}>
             <Image
@@ -88,7 +102,7 @@ const handleConsult = (e: React.MouseEvent) => {
           <p className="absolute top-[10px] left-[10px] py-1 px-4 bg-white rounded-md text-primary items-center">
             {property.status ? `belegt`: `noch nicht belegt`} {/* METTRE LE TAG */}
           </p>
-          <svg
+          {/*<svg
             xmlns="http://www.w3.org/2000/svg"
             className="absolute top-[10px] right-[10px] bg-white p-2 rounded-lg"
             viewBox="0 0 24 24"
@@ -97,8 +111,8 @@ const handleConsult = (e: React.MouseEvent) => {
             fill="#2F73F2"
           >
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-          </svg>
-        </div>
+          </svg>*/}
+        </div> 
         <div className={`p-5 sm:p-8 dark:text-white text-opacity-50 ${viewMode=="list" && 'w-[70%] flex flex-col justify-center'}`}>
 
           <div className="flex flex-col gap-1 border-b border-border dark:border-dark_border mb-6">
@@ -147,7 +161,36 @@ const handleConsult = (e: React.MouseEvent) => {
           </div>
         </div>
       </Link>
-    </div>
+
+      {showModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
+          <div className="bg-white dark:bg-semidark rounded-lg p-6 w-[90%] max-w-md">
+            <h3 className="text-lg font-bold mb-3">Flugzeug löschen</h3>
+            <p className="mb-5">
+              Möchten Sie dieses Flugzeug wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                className="px-4 py-2 rounded border border-gray-300"
+                onClick={() => setShowModal(false)}
+                disabled={loading}
+              >
+                Abbrechen
+              </button>
+
+              <button
+                className="px-4 py-2 rounded bg-red-600 text-white"
+                onClick={confirmDelete}
+                disabled={loading}
+              >
+                {loading ? "Löschen..." : "Bestätigen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div> </>
   );
 };
 

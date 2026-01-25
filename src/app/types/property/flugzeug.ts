@@ -13,7 +13,7 @@ export type Flugzeug = {
 export type FlugzeugFormData = {
   kennzeichen: string;
   baujahr: number | "";
-  bild: File | null;
+  bild: File | null | string;
 
   flugzeugtyp: string;
   flugzeuggroesse: string;
@@ -22,11 +22,11 @@ export type FlugzeugFormData = {
   flugkilometer: number | "";
   treibstoffverbrauch: number | "";
   frachtkapazitaet: number | "";
-  /*abmasse:{
+  abmasse:{
     fluegelspannweite: number | "";
     laenge: number | "";
     hoehe: number | "";
-  }*/
+  }
 };
 
 export type FlugzeugInfoProps = {

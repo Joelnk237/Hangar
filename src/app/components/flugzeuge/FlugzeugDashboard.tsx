@@ -8,6 +8,7 @@ import { Flugzeug } from "@/app/types/property/flugzeug";
 import Link from "next/link";
 import { Loader } from 'lucide-react';
 import { useRouter } from "next/navigation";
+import toast, {Toaster} from 'react-hot-toast';
 
 export default function FlugzeugDashboard({ category }: { category?: string }) {
     const [flugzeuge, setFlugzeuge] = useState<Flugzeug[]>([]);

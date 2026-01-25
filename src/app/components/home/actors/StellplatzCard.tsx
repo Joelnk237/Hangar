@@ -4,6 +4,9 @@ import Link from "next/link";
 import "../../../style/index.css";
 import { Eye, Edit, Trash2 } from "lucide-react";
 import { Stellplatz } from "@/app/types/property/stellplatz";
+import { LockKeyhole, LockKeyholeOpen } from "lucide-react";
+import toast , { Toaster } from "react-hot-toast";
+
 
 interface StellplatzCardProps {
   stellplatz: Stellplatz;
@@ -11,12 +14,101 @@ interface StellplatzCardProps {
   showActions?: boolean;
 }
 
-const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, showActions }) => { 
+const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, showActions }) => {
+  
+  const [showDeleteModal, setShowDeleteModal] = React.useState(false);
+  const [deleteLoading, setDeleteLoading] = React.useState(false);
+
   const serviceLabels = stellplatz.services
   ?.map(service => service.bezeichnung)
-  .join(", "); 
+  .join(", ");
+  
+  
+  const toggleAvailability = async (
+  e: React.MouseEvent,
+  stellplatzId: string,
+  currentAvailability: boolean
+) => {
+  e.preventDefault(); // 
+
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(
+      `http://localhost:8888/api/stellplaetze/${stellplatzId}/availability`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          availability: !currentAvailability,
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Update fehlgeschlagen");
+    }
+
+    toast.success(
+      !currentAvailability
+        ? "Stellplatz freigegeben"
+        : "Stellplatz deaktiviert"
+    );
+
+    window.location.reload(); // reloading
+  } catch (err) {
+    console.error(err);
+    toast.error("Fehler beim Aktualisieren");
+  }
+};
+
+const handleDeleteStellplatz = async () => {
+  setDeleteLoading(true);
+
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(
+      `http://localhost:8888/api/stellplaetze/${stellplatz.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (res.status === 409) {
+      toast.error(
+        "Dieser Stellplatz ist aktuell oder zukünftig gebucht und kann nicht gelöscht werden"
+      );
+      setShowDeleteModal(false);
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error("Löschen fehlgeschlagen");
+    }
+
+    toast.success("Stellplatz erfolgreich gelöscht");
+    setShowDeleteModal(false);
+    window.location.reload();
+  } catch (err) {
+    console.error(err);
+    toast.error("Fehler beim Löschen des Stellplatzes");
+  } finally {
+    setDeleteLoading(false);
+  }
+};
+
+
   
   return (
+  <>
+  <Toaster />
     <div
       key={stellplatz.id}
       className={`bg-white shadow-property dark:bg-darklight rounded-lg overflow-hidden`}
@@ -36,18 +128,8 @@ const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, s
             />
           </div>
           <p className="absolute top-[10px] left-[10px] py-1 px-4 bg-white rounded-md text-primary items-center">
-            {stellplatz.availability ? `frei`: `besetzt`} {/* METTRE LE TAG */}
+            {stellplatz.availability ? `verfügbar`: `nicht verfügbar`} {/* METTRE LE TAG */}
           </p>
-          {/*<svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="absolute top-[10px] right-[10px] bg-white p-2 rounded-lg"
-            viewBox="0 0 24 24"
-            width="38"
-            height="38"
-            fill="#2F73F2"
-          >
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-          </svg> */}
             <svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#2F73F2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-lock-keyhole-open-icon lucide-lock-keyhole-open absolute top-[10px] right-[10px] bg-white p-2 rounded-lg"><circle cx="12" cy="16" r="1"/><rect width="18" height="12" x="3" y="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 9.33-2.5"/></svg>
 
         </div>
@@ -82,28 +164,16 @@ const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, s
                 </p>
               )}
             </div>
-            {/*<div className="flex flex-col">
-              <p className="md:text-xl text-lg font-bold flex gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-cloud-rain-wind-icon lucide-cloud-rain-wind"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="m9.2 22 3-7"/><path d="m9 13-3 7"/><path d="m17 13-3 7"/></svg>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-shield-icon lucide-shield"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-door-open-icon lucide-door-open"><path d="M11 20H2"/><path d="M11 4.562v16.157a1 1 0 0 0 1.242.97L19 20V5.562a2 2 0 0 0-1.515-1.94l-4-1A2 2 0 0 0 11 4.561z"/><path d="M11 4H8a2 2 0 0 0-2 2v14"/><path d="M14 12h.01"/><path d="M22 20h-3"/></svg>
-              </p>
-            </div>*/}
-            {/*<div className="flex flex-col">
-              <p className="md:text-xl text-lg font-bold flex gap-2">
-                {stellplatz.einlagerung.preis} €
-              </p>
-              <p className="text-sm text-gray">
-                {stellplatz.einlagerung.einheit}
-              </p>
-            </div>* */}
             {showActions && (
         <div className="flex justify-end gap-3 px-5 pb-4">
           <button
+            onClick={(e) =>
+              toggleAvailability(e, stellplatz.id, stellplatz.availability)
+            }
             className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
-            title="ansehen"
+            title={stellplatz.availability ? "Stellplatz als nicht verfügbar markieren": "Stellplatz freigeben"}
           >
-            <Eye size={18} />
+            {stellplatz.availability?( <LockKeyhole size={18} />):(<LockKeyholeOpen size={18}/>)}
           </button>
 
           <button
@@ -114,6 +184,10 @@ const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, s
           </button>
 
           <button
+          onClick={(e) => {
+            e.preventDefault();
+            setShowDeleteModal(true);
+          }}
             className="p-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-500 hover:text-white transition"
             title="löschen"
           >
@@ -125,6 +199,41 @@ const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, s
         </div>
       </Link>
     </div>
+
+    {showDeleteModal && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white dark:bg-semidark rounded-lg p-6 w-full max-w-md space-y-4">
+
+      <h2 className="text-lg font-semibold text-red-600">
+        Stellplatz löschen
+      </h2>
+
+      <p className="text-sm text-gray-600 dark:text-gray-300">
+        Sind Sie sicher, dass Sie diesen Stellplatz endgültig löschen möchten?
+        Diese Aktion kann nicht rückgängig gemacht werden.
+      </p>
+
+      <div className="flex justify-end gap-3 pt-4">
+        <button
+          onClick={() => setShowDeleteModal(false)}
+          className="px-4 py-2 border rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+        >
+          Abbrechen
+        </button>
+
+        <button
+          disabled={deleteLoading}
+          onClick={handleDeleteStellplatz}
+          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+        >
+          {deleteLoading ? "Löschen..." : "Bestätigen"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+</>
+
   );
 };
 

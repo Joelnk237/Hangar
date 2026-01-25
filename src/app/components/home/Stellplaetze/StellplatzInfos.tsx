@@ -151,6 +151,7 @@ const handleConfirmReservation = async () => {
 
   return (
     <>
+    <Toaster />
     <div className="pt-20 pb-32 bg-light dark:bg-darkmode">
       <div className="pt-11 flex justify-center items-center">
         <div className="max-w-4xl w-full bg-white dark:bg-semidark px-8 py-14 sm:px-12 md:px-16 rounded-lg">

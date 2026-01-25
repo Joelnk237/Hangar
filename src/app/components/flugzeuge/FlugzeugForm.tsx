@@ -23,6 +23,10 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<{ id: any, rolle: any, email:any } | null>(null);
 
+  const existingImageUrl = mode === "edit" ? (initialData?.bild != null): false;
+  console.log("initial bild", initialData?.bild)
+
+
   const [formData, setFormData] = useState<FlugzeugFormData>({
     kennzeichen: "",
     baujahr: "",
@@ -33,17 +37,23 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
     flugkilometer: "",
     treibstoffverbrauch: "",
     frachtkapazitaet: "",
-    /*abmasse:{
+    abmasse:{
     fluegelspannweite:"",
     laenge: "",
     hoehe: "",
-    }*/
+    },
   });
 
   /* -------- Initialisierung bei Edit -------- */
   useEffect(() => {
     if (mode === "edit" && initialData) {
-      setFormData({ ...initialData, bild: null });
+      setFormData({ ...initialData,
+         bild: null,
+         abmasse: initialData.abmasse || {
+          fluegelspannweite: "",
+          laenge: "",
+          hoehe: "",
+        }, });
     }
   }, [mode, initialData]);
 
@@ -69,6 +79,13 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
       bild: e.target.files ? e.target.files[0] : null,
     }));
   };
+  const handleAbmasseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      abmasse: { ...prev.abmasse, [name]: value },
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +108,10 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
 
       if (formData.bild) {
         form.append("bild", formData.bild);
+      }
+      // Append Abmasse as JSON
+      if (formData.abmasse) {
+        form.append("abmasse", JSON.stringify(formData.abmasse));
       }
       form.append("flugzeugbesitzerId", user?.id);
 
@@ -158,12 +179,14 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
             className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
           />
 
-          <input
+          {!existingImageUrl && (<input
             type="file"
             name="bild"
             onChange={handleFileChange}
             className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary col-span-2"
-          />
+          />)}{existingImageUrl && (
+              <p className="text-sm text-gray-600 dark:text-gray-300 col-span-2"></p>
+            )}
         </div>
 
         {/* ---------------- Kategorie ---------------- */}
@@ -203,6 +226,33 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
           )}{!formData.flugzeuggroesse &&(<><p></p><p className="mt-2 text-xs text-gray-600 dark:text-gray-300"></p></>)}
 
         </div>
+        {/* ABMAßE */}<h3 className="text-base text-midnight_text font-semibold mb-3 text-midnight_text dark:text-white">Abmaße</h3>
+              <div className="col-span-2 grid grid-cols-3 gap-8 mt-2">
+                <input
+                  type="number"
+                  name="fluegelspannweite"
+                  placeholder="Flügelspannweite (m)"
+                  value={formData.abmasse.fluegelspannweite}
+                  onChange={handleAbmasseChange}
+                  className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
+                />
+                <input
+                  type="number"
+                  name="laenge"
+                  placeholder="Länge (m)"
+                  value={formData.abmasse.laenge}
+                  onChange={handleAbmasseChange}
+                  className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
+                />
+                <input
+                  type="number"
+                  name="hoehe"
+                  placeholder="Höhe (m)"
+                  value={formData.abmasse.hoehe}
+                  onChange={handleAbmasseChange}
+                  className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
+                />
+              </div>
 
         {/* ---------------- Betriebsdaten ---------------- */}
         <h3 className="text-base text-midnight_text font-semibold mb-3 text-midnight_text dark:text-white">Betriebsdaten</h3>
@@ -244,14 +294,18 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
             className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
           />
         </div>
-
-        <button
-          type="submit"
-          className="w-full bg-primary text-white py-3 rounded-md"
-        >
-          {mode === "create" ? "Flugzeug erstellen" : "Änderung speichern"}
-          {loading && <Loader />}
-        </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <button className="w-full bg-primary text-white py-3 rounded-md">Abbrechen</button>
+            <button
+              type="submit"
+              className="w-full bg-primary text-white py-3 rounded-md"
+            >
+              {mode === "create" ? "Flugzeug erstellen" : "Änderung speichern"}
+              {loading && <Loader />}
+            </button>
+            
+          </div>
+        
       </form>
     </div>
     </div>

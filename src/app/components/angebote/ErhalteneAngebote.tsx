@@ -101,6 +101,7 @@ const Angebote = ({ angebote }: Props) => {
     return(
 
     <>
+    <Toaster />
         {/* ================= MODAL ================= */}
       
 

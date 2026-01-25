@@ -31,13 +31,18 @@ export default function EditFlugzeugPage() {
         id: json.id,
         kennzeichen: json.kennzeichen,
         baujahr: json.baujahr ?? "",
-        bild: null,
+        bild: json.bild ?? null,
         flugzeugtyp: json.flugzeugtyp ?? "",
         flugzeuggroesse: json.flugzeuggroesse ?? "",
         flugstunden: json.flugstunden ?? "",
         flugkilometer: json.flugkilometer ?? "",
         treibstoffverbrauch: json.treibstoffverbrauch ?? "",
         frachtkapazitaet: json.frachtkapazitaet ?? "",
+        abmasse: json.abmasse ?? {
+          fluegelspannweite: "",
+          laenge: "",
+          hoehe: "",
+        },
       });
 
       setLoading(false);

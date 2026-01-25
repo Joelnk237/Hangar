@@ -66,7 +66,8 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
 
     return (
         <>
-            
+            <div className="pt-11 flex justify-center items-center">
+        <div className="max-w-8xl w-full bg-white dark:bg-semidark px-8 py-14 sm:px-12 md:px-16 rounded-lg">
             <section className='dark:bg-darkmode px-4'>
                 <div className='lg:max-w-screen-xl max-w-screen-md mx-auto'>
                     
@@ -150,7 +151,7 @@ export default function FlugzeugDashboard({ category }: { category?: string }) {
                         {/* FIN ICI !!!! */}
                     </div>
                 </div>
-            </section>
+            </section></div></div>
         </>
     );
 }

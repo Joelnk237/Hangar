@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Loader from "../shared/Loader";
 import { FlugzeugFormData } from "@/app/types/property/flugzeug";
+import toast from "react-hot-toast";
 
 type FlugzeugFormProps = {
   mode: "create" | "edit";
@@ -101,6 +102,7 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
       const form = new FormData();
 
       Object.entries(formData).forEach(([key, value]) => {
+        if (key === "abmasse" || key === "bild") return;
         if (value !== "" && value !== null) {
           form.append(key, String(value));
         }
@@ -109,6 +111,8 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
       if (formData.bild) {
         form.append("bild", formData.bild);
       }
+      
+
       // Append Abmasse as JSON
       if (formData.abmasse) {
         form.append("abmasse", JSON.stringify(formData.abmasse));
@@ -129,10 +133,15 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
         }
       );
 
-      if (!res.ok) throw new Error("Speichern fehlgeschlagen");
+      if (!res.ok) {
+      const message = await res.text();
+      toast.error(message);
+      return;
+      }
 
-      onSuccess?.();
+      toast.success("Flugzeug erfolgreich gespeichert");
       router.push("/flugzeuge");
+
     } catch (err: any) {
       alert(err.message || "Unbekannter Fehler");
     } finally {
@@ -234,6 +243,7 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
                   placeholder="Flügelspannweite (m)"
                   value={formData.abmasse.fluegelspannweite}
                   onChange={handleAbmasseChange}
+                  required
                   className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
                 />
                 <input
@@ -241,6 +251,7 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
                   name="laenge"
                   placeholder="Länge (m)"
                   value={formData.abmasse.laenge}
+                  required
                   onChange={handleAbmasseChange}
                   className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
                 />
@@ -249,6 +260,7 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
                   name="hoehe"
                   placeholder="Höhe (m)"
                   value={formData.abmasse.hoehe}
+                  required
                   onChange={handleAbmasseChange}
                   className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
                 />

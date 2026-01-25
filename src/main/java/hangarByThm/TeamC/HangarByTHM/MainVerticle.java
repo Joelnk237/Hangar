@@ -2,12 +2,15 @@ package hangarByThm.TeamC.HangarByTHM;
 
 import io.vertx.core.Future;
 import io.vertx.core.MultiMap;
+
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 import io.vertx.core.VerticleBase;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.auth.JWTOptions;
@@ -145,10 +148,16 @@ public class MainVerticle extends VerticleBase {
       .handler(this::createFlugzeugHandler);
 
 
-    router.put("/api/flugzeuge/:id")
+    /*router.put("/api/flugzeuge/:id")
       .handler(jwtAuthHandler)  // JWT Handling
       .handler(this::flugzeugbesitzerContextHandler)
-      .handler(this::modifyFlugzeugHandler);
+      .handler(this::modifyFlugzeugHandler);*/
+
+    router.put("/api/flugzeuge/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::updateFlugzeugHandler);
+
 
     router.delete("/api/flugzeuge/:id")
       .handler(jwtAuthHandler)
@@ -746,78 +755,151 @@ public class MainVerticle extends VerticleBase {
   }
 
 
-  private void modifyFlugzeugHandler(RoutingContext ctx) {
+  private void updateFlugzeugHandler(RoutingContext ctx) {
 
-    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
-    UUID flugzeugId = UUID.fromString(ctx.pathParam("id"));
+    UUID flugzeugId;
+    UUID flugzeugbesitzerId;
 
-    JsonObject json = new JsonObject();
-    ctx.request().formAttributes().forEach(e ->
-      json.put(e.getKey(), e.getValue())
-    );
-
-    Flugzeug flugzeug = Flugzeug.fromJson(json);
-    flugzeug.setId(flugzeugId);
-    flugzeug.setFlugzeugbesitzerId(flugzeugbesitzerId);
-
-    // -------- Image Upload (optional) --------
-    if (!ctx.fileUploads().isEmpty()) {
-      FileUpload upload = ctx.fileUploads().iterator().next();
-      String filename = UUID.randomUUID() + "-" + upload.fileName();
-      String target = "uploads/flugzeuge/" + filename;
-
-      try {
-        Files.move(
-          Path.of(upload.uploadedFileName()),
-          Path.of(target),
-          StandardCopyOption.REPLACE_EXISTING
-        );
-        flugzeug.setBild("/uploads/flugzeuge/" + filename);
-      } catch (IOException e) {
-        ctx.fail(500, e);
-        return;
-      }
+    try {
+      flugzeugId = UUID.fromString(ctx.pathParam("id"));
+      flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige ID");
+      return;
     }
 
+      String kennzeichen = ctx.request().getFormAttribute("kennzeichen");
+      String flugzeugtyp = ctx.request().getFormAttribute("flugzeugtyp");
+      String flugzeuggroesse = ctx.request().getFormAttribute("flugzeuggroesse");
+      String abmasseJson = ctx.request().getFormAttribute("abmasse");
+
+      if (kennzeichen == null || flugzeugtyp == null || flugzeuggroesse == null || abmasseJson == null) {
+        ctx.response().setStatusCode(400).end("Pflichtfelder fehlen");
+        return;
+      }
+
+      JsonObject abmasse;
+      try {
+        abmasse = new JsonObject(abmasseJson);
+      } catch (Exception e) {
+        ctx.response().setStatusCode(400).end("Ungültiges Abmasse-Format");
+        return;
+      }
+
+      // Image optionnelle
+      FileUpload upload = ctx.fileUploads().stream().findFirst().orElse(null);
+
+      if (upload != null) {
+        handleUpdateWithImage(ctx, flugzeugId, flugzeugbesitzerId, ctx.request(), abmasse, upload);
+      } else {
+        handleUpdateWithoutImage(ctx, flugzeugId, flugzeugbesitzerId, ctx.request(), abmasse);
+      }
+  }
+
+  private void handleUpdateWithoutImage(
+    RoutingContext ctx,
+    UUID flugzeugId,
+    UUID besitzerId,
+    HttpServerRequest req,
+    JsonObject abmasse
+  ) {
+
     String sql = """
-    UPDATE flugzeug SET
+    UPDATE flugzeug
+    SET
       kennzeichen = $1,
-      flugzeugtyp = $2::flugzeugtyp_enum,
-      flugzeuggroesse = $3::flugzeuggroesse_enum,
-      bild = COALESCE($4, bild),
+      flugzeugtyp = $2,
+      flugzeuggroesse = $3,
+      abmasse = $4,
       flugstunden = $5,
       flugkilometer = $6,
-      treibstoffverbrauch = $7,
-      frachtkapazitaet = $8
-    WHERE id = $9
-      AND flugzeugbesitzer_id = $10
+      baujahr = $7,
+      treibstoffverbrauch = $8,
+      frachtkapazitaet = $9
+    WHERE id = $10 AND flugzeugbesitzer_id = $11
   """;
 
+    Tuple tuple = Tuple.tuple()
+      .addString(req.getFormAttribute("kennzeichen"))
+      .addString(req.getFormAttribute("flugzeugtyp"))
+      .addString(req.getFormAttribute("flugzeuggroesse"))
+      .addValue(abmasse.encode())
+      .addInteger(Integer.parseInt(req.getFormAttribute("flugstunden")))
+      .addInteger(Integer.parseInt(req.getFormAttribute("flugkilometer")))
+      .addInteger(Integer.parseInt(req.getFormAttribute("baujahr")))
+      .addBigDecimal(new BigDecimal(req.getFormAttribute("treibstoffverbrauch")))
+      .addInteger(Integer.parseInt(req.getFormAttribute("frachtkapazitaet")))
+      .addUUID(flugzeugId)
+      .addUUID(besitzerId);
+
     client.preparedQuery(sql)
-      .execute(Tuple.of(
-        flugzeug.getKennzeichen(),
-        flugzeug.getFlugzeugtyp().name(),
-        flugzeug.getFlugzeuggroesse().name(),
-        flugzeug.getBild(),
-        flugzeug.getFlugstunden(),
-        flugzeug.getFlugkilometer(),
-        flugzeug.getTreibstoffverbrauch(),
-        flugzeug.getFrachtkapazitaet(),
-        flugzeugId,
-        flugzeug.getFlugzeugbesitzerId()
-      ))
+      .execute(tuple)
       .onSuccess(res -> {
         if (res.rowCount() == 0) {
-          ctx.response().setStatusCode(404).end("Flugzeug nicht gefunden");
+          ctx.response().setStatusCode(403).end("Nicht berechtigt");
         } else {
-          ctx.response()
-            .setStatusCode(200)
-            .end(new JsonObject()
-              .put("message", "Flugzeug erfolgreich aktualisiert")
-              .encode());
+          ctx.response().setStatusCode(200).end("Flugzeug aktualisiert");
         }
       })
-      .onFailure(err -> ctx.fail(500, err));
+      .onFailure(err -> {
+        ctx.response().setStatusCode(500).end(err.getMessage());
+      });
+  }
+
+  private void handleUpdateWithImage(
+    RoutingContext ctx,
+    UUID flugzeugId,
+    UUID besitzerId,
+    HttpServerRequest req,
+    JsonObject abmasse,
+    FileUpload upload
+  ) {
+
+    String filename = UUID.randomUUID() + "_" + upload.fileName();
+    Path target = Paths.get("uploads/flugzeuge", filename);
+
+    ctx.vertx().fileSystem()
+      .move(upload.uploadedFileName(), target.toString())
+      .onFailure(err -> {
+        ctx.response().setStatusCode(500).end("Erreur upload image");
+      })
+      .onSuccess(v -> {
+
+      String sql = """
+      UPDATE flugzeug
+      SET
+        kennzeichen = $1,
+        flugzeugtyp = $2,
+        flugzeuggroesse = $3,
+        abmasse = $4,
+        bild = $5,
+        flugstunden = $6,
+        flugkilometer = $7,
+        baujahr = $8,
+        treibstoffverbrauch = $9,
+        frachtkapazitaet = $10
+      WHERE id = $11 AND flugzeugbesitzer_id = $12
+    """;
+
+      Tuple tuple = Tuple.tuple()
+        .addString(req.getFormAttribute("kennzeichen"))
+        .addString(req.getFormAttribute("flugzeugtyp"))
+        .addString(req.getFormAttribute("flugzeuggroesse"))
+        .addValue(abmasse.encode())
+        .addString("/uploads/flugzeuge/" + filename)
+        .addInteger(Integer.parseInt(req.getFormAttribute("flugstunden")))
+        .addInteger(Integer.parseInt(req.getFormAttribute("flugkilometer")))
+        .addInteger(Integer.parseInt(req.getFormAttribute("baujahr")))
+        .addBigDecimal(new BigDecimal(req.getFormAttribute("treibstoffverbrauch")))
+        .addInteger(Integer.parseInt(req.getFormAttribute("frachtkapazitaet")))
+        .addUUID(flugzeugId)
+        .addUUID(besitzerId);
+
+      client.preparedQuery(sql)
+        .execute(tuple)
+        .onSuccess(res -> ctx.response().setStatusCode(200).end("Flugzeug aktualisiert"))
+        .onFailure(err -> ctx.response().setStatusCode(500).end(err.getMessage()));
+    });
   }
 
 

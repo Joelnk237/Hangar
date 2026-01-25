@@ -157,9 +157,19 @@ public class Flugzeug {
     if (json.getString("flugzeuggroesse") != null)
       f.setFlugzeuggroesse(Flugzeuggroesse.valueOf(json.getString("flugzeuggroesse")));
 
+    // Parse abmasse JSON
+    /*String abmasseStr = json.getString("abmasse");
+    JsonObject abmasseJson;
+    if (abmasseStr != null && !abmasseStr.isBlank()) {
+      abmasseJson = new JsonObject(abmasseStr);
+      f.setAbmasse(new Abmasse(abmasseJson.getDouble("spannweite"),abmasseJson.getDouble("laenge"),abmasseJson.getDouble("hoehe")));
+    }*/
+
+
     f.setKennzeichen(json.getString("kennzeichen"));
     f.setBild(json.getString("bild"));
     f.setFlugstunden(Integer.parseInt(json.getString("flugstunden")));
+    f.setBaujahr(Integer.parseInt(json.getString("baujahr")));
     f.setFlugkilometer(Integer.parseInt(json.getString("flugkilometer")));
     f.setTreibstoffverbrauch(Double.parseDouble(json.getString("treibstoffverbrauch")));
     f.setFrachtkapazitaet(Integer.parseInt(json.getString("frachtkapazitaet")));
@@ -206,6 +216,11 @@ public class Flugzeug {
       f.setFlugzeuggroesse(Flugzeuggroesse.valueOf(groesse));
     }
 
+    String bild = row.getString("bild");
+    if (bild != null) {
+      f.setBild(bild);
+    }
+
     // Strings
     f.setKennzeichen(row.getString("kennzeichen"));
     f.setBild(row.getString("bild"));
@@ -222,14 +237,26 @@ public class Flugzeug {
     f.setFrachtkapazitaet(row.getInteger("frachtkapazitaet"));
 
     // JSONB → Abmasse
-    JsonObject abmasseJson = row.getJsonObject("abmasse");
-    if (abmasseJson != null) {
-      Abmasse abmasse = new Abmasse(
-        Double.parseDouble(abmasseJson.getString("fluegelspannweite")),
-        Double.parseDouble(abmasseJson.getString("laenge")),
-        Double.parseDouble(abmasseJson.getString("hoehe"))
-      );
-      f.setAbmasse(abmasse);
+    Object abmasseRaw = row.getValue("abmasse");
+    if(abmasseRaw != null){
+      if (abmasseRaw instanceof JsonObject abmasseJson) {
+        // Cas rare : déjà JsonObject
+        f.setAbmasse(new Abmasse(
+          abmasseJson.getDouble("fluegelspannweite"),
+          abmasseJson.getDouble("laenge"),
+          abmasseJson.getDouble("hoehe")
+        ));
+      }
+      else if (abmasseRaw instanceof String abmasseStr && !abmasseStr.isBlank()) {
+        // Cas NORMAL avec PostgreSQL
+        JsonObject abmasseJson = new JsonObject(abmasseStr);
+
+        f.setAbmasse(new Abmasse(
+          Double.parseDouble(abmasseJson.getString("fluegelspannweite")),
+          Double.parseDouble(abmasseJson.getString("laenge")),
+          Double.parseDouble(abmasseJson.getString("hoehe"))
+        ));
+      }
     }
 
     return f;

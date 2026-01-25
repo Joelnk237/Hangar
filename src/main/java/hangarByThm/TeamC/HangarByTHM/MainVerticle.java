@@ -152,10 +152,13 @@ public class MainVerticle extends VerticleBase {
 
     router.delete("/api/flugzeuge/:id")
       .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
       .handler(this::deleteFlugzeugHandler);
 
-    //router.get("/api/flugzeuge/:id")
-      //.handler(this::getFlugzeugInfosHandler);
+
+    router.get("/api/flugzeuge/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::getFlugzeugInfosHandler);
 
     router.get("/api/flugzeuge")
       .handler(jwtAuthHandler)
@@ -220,24 +223,44 @@ public class MainVerticle extends VerticleBase {
       .handler(this::hangaranbieterContextHandler)
       .handler(this::getReservierungenHandler);
 
+
+
     router.get("/api/stellplaetze/:id")
       .handler(this::getStellplatzInfosHandler);
 
+    //Stellplatz löschen
+    router.delete("/api/stellplaetze/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::deleteStellplatzHandler);
+
+
+    //Stellplatzcontroller: stellplatz erfassen
     router.post("/api/stellplaetze")
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::createStellplatzHandler);
 
+    // Hangarcontroller: Stellplätze lade
     router.get("/api/stellplaetze")
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::getMyStellplaetzeHandler);
 
+    // stellplatz suchen
     router.get("/api/search/stellplaetze/options")
       .handler(this::searchStellplaetzeHandler);
 
+    // Stellplatzcontroler: alle Infos über stellplatz
     router.get("/api/stellplaetze/:id/details")
       .handler(this::getStellplatzByIdHandler);
+
+    //Stellplatzcontroller: avaibility aktualisieren
+    router.put("/api/stellplaetze/:id/availability")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::updateStellplatzAvailabilityHandler);
+
 
     //Stellplatz reservieren
     router.post("/api/reservierungen")
@@ -647,6 +670,14 @@ public class MainVerticle extends VerticleBase {
 
     Flugzeug flugzeug = Flugzeug.fromJson(json);
 
+    String abmasseStr = json.getString("abmasse");
+    JsonObject abmasseJson;
+    if (abmasseStr != null && !abmasseStr.isBlank()) {
+      abmasseJson = new JsonObject(abmasseStr);
+    } else {
+      abmasseJson = null;
+    }
+
     // flugzeugbesitzerId in der Flugzeugbesitzer Tabelle
     String selectOwner = "SELECT id FROM flugzeugbesitzer WHERE benutzer_id = $1";
 
@@ -682,8 +713,8 @@ public class MainVerticle extends VerticleBase {
         String sql = """
     INSERT INTO flugzeug
     (flugzeugbesitzer_id, kennzeichen, flugzeugtyp, flugzeuggroesse,
-     bild, flugstunden, flugkilometer, treibstoffverbrauch, frachtkapazitaet)
-    VALUES ($1,$2,$3::flugzeugtyp_enum,$4::flugzeuggroesse_enum,$5,$6,$7,$8,$9)
+     bild, flugstunden, flugkilometer, treibstoffverbrauch, frachtkapazitaet, baujahr, abmasse)
+    VALUES ($1,$2,$3::flugzeugtyp_enum,$4::flugzeuggroesse_enum,$5,$6,$7,$8,$9,$10,$11::jsonb)
   """;
 
 
@@ -697,7 +728,9 @@ public class MainVerticle extends VerticleBase {
             flugzeug.getFlugstunden(),
             flugzeug.getFlugkilometer(),
             flugzeug.getTreibstoffverbrauch(),
-            flugzeug.getFrachtkapazitaet()
+            flugzeug.getFrachtkapazitaet(),
+            flugzeug.getBaujahr(),
+            abmasseJson != null ? abmasseJson.encode(): null
           ))
           .onSuccess(v ->
             ctx.response()
@@ -824,75 +857,98 @@ public class MainVerticle extends VerticleBase {
 
   private void deleteFlugzeugHandler(RoutingContext ctx) {
 
-    UUID benutzerId = UUID.fromString(
-      ctx.user().principal().getString("sub")
-    );
+    UUID flugzeugId = UUID.fromString(ctx.pathParam("id"));
+    UUID flugzeugbesitzerId = UUID.fromString(ctx.get("flugzeugbesitzerId"));
+
+    // ob das Flugzeug dem User gehört
+    String sqlCheckOwner =
+      "SELECT bild FROM flugzeug WHERE id = $1 AND flugzeugbesitzer_id = $2";
+
+    client.preparedQuery(sqlCheckOwner)
+      .execute(Tuple.of(flugzeugId, flugzeugbesitzerId))
+      .compose(rows -> {
+        if (!rows.iterator().hasNext()) {
+          return Future.failedFuture("Flugzeug nicht gefunden oder nicht autorisiert");
+        }
+        String bildPfad = rows.iterator().next().getString("bild");
+        ctx.put("bildPfad", bildPfad);
+        return Future.succeededFuture();
+      })
+      // Überprüfe ob das Flugzeug keinen Stellplatz belegt
+      .compose(v -> {
+        String sqlCheckBooked =
+          "SELECT 1 FROM flugzeug_zu_stellplatz WHERE flugzeug_id = $1 LIMIT 1";
+        return client.preparedQuery(sqlCheckBooked).execute(Tuple.of(flugzeugId));
+      })
+      .compose(rows -> {
+        if (rows.iterator().hasNext()) {
+          return Future.failedFuture("Flugzeug ist aktuell reserviert oder belegt");
+        }
+        return Future.succeededFuture();
+      })
+      // 3) Suppression
+      .compose(v -> {
+        String sqlDelete = "DELETE FROM flugzeug WHERE id = $1";
+        return client.preparedQuery(sqlDelete).execute(Tuple.of(flugzeugId));
+      })
+      .onSuccess(v -> {
+        deleteBildIfExists(ctx.get("bildPfad"));
+        ctx.response()
+          .setStatusCode(200)
+          .end("Flugzeug erfolgreich gelöscht");
+      })
+      .onFailure(err -> {
+        if (err.getMessage().contains("reserviert") || err.getMessage().contains("belegt")) {
+          ctx.response().setStatusCode(409).end(err.getMessage());
+        } else {
+          ctx.response().setStatusCode(500).end("Serverfehler");
+        }
+      });
+  }
+
+  //get flugzeuginfos
+  private void getFlugzeugInfosHandler(RoutingContext ctx) {
+    String idParam = ctx.pathParam("id");
 
     UUID flugzeugId;
     try {
-      flugzeugId = UUID.fromString(ctx.pathParam("id"));
+      flugzeugId = UUID.fromString(idParam);
     } catch (IllegalArgumentException e) {
-      ctx.response().setStatusCode(400).end("Ungültige Flugzeug-ID");
+      ctx.response()
+        .setStatusCode(400)
+        .end("Ungültige Flugzeug-ID");
       return;
     }
 
-    // 1. flugzeugbesitzer_id abrufen
-    flugzeugbesitzerService
-      .getFlugzeugbesitzerId(benutzerId)
+    String sql = """
+    SELECT *
+    FROM flugzeug
+    WHERE id = $1
+  """;
 
-      // 2.   Bild-Pfad abrufen(optional)
-      .compose(flugzeugbesitzerId -> {
+    client.preparedQuery(sql)
+      .execute(Tuple.of(flugzeugId))
+      .onSuccess(rows -> {
 
-        String selectSql = """
-        SELECT bild
-        FROM flugzeug
-        WHERE id = $1
-          AND flugzeugbesitzer_id = $2
-      """;
-
-        return client
-          .preparedQuery(selectSql)
-          .execute(Tuple.of(flugzeugId, flugzeugbesitzerId))
-          .compose(rows -> {
-
-            if (!rows.iterator().hasNext()) {
-              return Future.failedFuture("NOT_FOUND");
-            }
-
-            String bildPfad = rows.iterator().next().getString("bild");
-
-            // 3. Flugzeug in DB löschen
-            String deleteSql = """
-            DELETE FROM flugzeug
-            WHERE id = $1
-              AND flugzeugbesitzer_id = $2
-          """;
-
-            return client
-              .preparedQuery(deleteSql)
-              .execute(Tuple.of(flugzeugId, flugzeugbesitzerId))
-              .onSuccess(v -> deleteBildIfExists(bildPfad));
-          });
-      })
-
-      // 4 succes
-      .onSuccess(v ->
-        ctx.response()
-          .setStatusCode(200)
-          .putHeader("Content-Type", "application/json")
-          .end(new JsonObject()
-            .put("message", "Flugzeug erfolgreich gelöscht")
-            .encode())
-      )
-
-      // 5. Error handling
-      .onFailure(err -> {
-        if ("NOT_FOUND".equals(err.getMessage())) {
-          ctx.response().setStatusCode(404).end("Flugzeug nicht gefunden");
-        } else {
-          err.printStackTrace();
-          ctx.response().setStatusCode(500).end("Serverfehler");
+        if (!rows.iterator().hasNext()) {
+          ctx.response()
+            .setStatusCode(404)
+            .end("Flugzeug nicht gefunden");
+          return;
         }
+
+        Row row = rows.iterator().next();
+        Flugzeug flugzeug = Flugzeug.fromRow(row);
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(flugzeug.toJson().encode());
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Datenbankfehler");
       });
   }
 
@@ -1346,13 +1402,14 @@ public class MainVerticle extends VerticleBase {
       });
   }
 
+  // Stellplatz suchen
   private void searchStellplaetzeHandler(RoutingContext ctx) {
-    System.out.println("Suchen demarre");
+    //System.out.println("Suchen demarre");
     String keyword = ctx.request().getParam("keyword");
     String ort = ctx.request().getParam("location");
     String flugzeugtyp = ctx.request().getParam("flugzeugtyp");
     String flugzeuggroesse = ctx.request().getParam("flugzeuggroesse");
-    System.out.println("Suchen "+ ort);
+    System.out.println("Sucht nach  "+ ort);
 
 
     StringBuilder sql = new StringBuilder("""
@@ -1385,8 +1442,8 @@ public class MainVerticle extends VerticleBase {
     }
 
     if (ort != null && !ort.isBlank()) {
-      sql.append(" AND LOWER(s.standort) = $").append(i);
-      params.add(ort.toLowerCase());
+      sql.append(" AND LOWER(s.standort) LIKE $").append(i);
+      params.add("%" + ort.toLowerCase() + "%");
       i++;
     }
 
@@ -1950,6 +2007,7 @@ public class MainVerticle extends VerticleBase {
 
         if (!rows.iterator().hasNext()) {
           result.put("hangar", null);
+          //System.out.println(result);
           return loadZustand(flugzeugId, null, result);
         }
 
@@ -2041,7 +2099,7 @@ public class MainVerticle extends VerticleBase {
         }
 
         result.put("zustand", zustand);
-        System.out.println(result);
+        //System.out.println(result);
         return result;
       });
   }
@@ -3319,17 +3377,119 @@ private void buchZusatzserviceHandler(RoutingContext ctx) {
       });
   }
 
+  //Verfügbarkeit eines Stellplatzs aktualisieren
+  private void updateStellplatzAvailabilityHandler(RoutingContext ctx) {
 
+    UUID stellplatzId;
+    try {
+      stellplatzId = UUID.fromString(ctx.pathParam("id"));
+    } catch (IllegalArgumentException e) {
+      ctx.response().setStatusCode(400).end("ID de Stellplatz invalide");
+      return;
+    }
 
+    UUID anbieterId = ctx.get("anbieterId");
 
+    JsonObject body = ctx.body().asJsonObject();
+    if (body == null || !body.containsKey("availability")) {
+      ctx.response().setStatusCode(400).end("Champ 'availability' manquant");
+      return;
+    }
 
+    Boolean availability = body.getBoolean("availability");
 
+    String sql = """
+    UPDATE stellplatz
+    SET availability = $1
+    WHERE id = $2
+      AND hangaranbieter_id = $3
+  """;
 
+    client.preparedQuery(sql)
+      .execute(Tuple.of(availability, stellplatzId, anbieterId))
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response()
+            .setStatusCode(404)
+            .end("Stellplatz nicht trouvé ou accès refusé");
+          return;
+        }
 
+        ctx.response()
+          .setStatusCode(200)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("id", stellplatzId.toString())
+            .put("availability", availability)
+            .encode()
+          );
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response().setStatusCode(500).end("Erreur serveur");
+      });
+  }
 
+  private void deleteStellplatzHandler(RoutingContext ctx) {
 
+    UUID stellplatzId;
+    try {
+      stellplatzId = UUID.fromString(ctx.pathParam("id"));
+    } catch (IllegalArgumentException e) {
+      ctx.response().setStatusCode(400).end("ID Stellplatz invalide");
+      return;
+    }
+    UUID anbieterId = ctx.get("anbieterId");
 
+    // ob der Stellplatz schon abgebucht worden
+    String checkSql = """
+    SELECT 1
+    FROM flugzeug_zu_stellplatz
+    WHERE stellplatz_id = $1
+      AND bis >= CURRENT_DATE
+    LIMIT 1
+  """;
 
+    client.preparedQuery(checkSql)
+      .execute(Tuple.of(stellplatzId))
+      .compose(rows -> {
+        if (rows.iterator().hasNext()) {
+          return Future.failedFuture("STELLPLATZ_GEBUCHT");
+        }
 
+        //  ownership check included
+        String deleteSql = """
+        DELETE FROM stellplatz
+        WHERE id = $1
+          AND hangaranbieter_id = $2
+      """;
+
+        return client
+          .preparedQuery(deleteSql)
+          .execute(Tuple.of(stellplatzId, anbieterId));
+      })
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response()
+            .setStatusCode(404)
+            .end("Stellplatz nicht gefunden oder Zugriff verweigert");
+          return;
+        }
+
+        ctx.response()
+          .setStatusCode(200)
+          .end("Stellplatz erfolgreich gelöscht");
+      })
+      .onFailure(err -> {
+        if ("STELLPLATZ_GEBUCHT".equals(err.getMessage())) {
+          ctx.response()
+            .setStatusCode(409)
+            .end("Stellplatz ist aktuell oder zukünftig gebucht");
+        } else {
+          err.printStackTrace();
+          ctx.response().setStatusCode(500).end("Serverfehler");
+        }
+      });
+  }
 
 }

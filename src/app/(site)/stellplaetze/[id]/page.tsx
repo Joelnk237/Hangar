@@ -3,9 +3,11 @@ import React, { useEffect, useState } from 'react';
 import StellplatzInfos from '@/app/components/home/Stellplaetze/StellplatzInfos';
 import { StellplatzInfosProps } from "@/app/types/property/stellplatzData";
 
-
-const Page = ({ params }: { params: { id: string } }) => {
-    const { id } = params;
+type PageProps = {
+  params: Promise<{ id: string }>;
+};
+const Page = ({ params }: PageProps) => {
+    const { id } = React.use(params);
 
   const [stellplatzFromDB, setStellplatz] = useState<StellplatzInfosProps | null>(null);
   const [loading, setLoading] = useState(true);

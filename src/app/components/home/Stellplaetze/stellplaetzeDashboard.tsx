@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import { Stellplatz } from "@/app/types/property/stellplatz";
 import { Loader } from 'lucide-react';
 
-export default function stellplaetzeDashboard({ category }: { category?: string }) {
+export default function stellplaetzeDashboard() {
     const [stellplaetze, setStellplaetze] = useState<Stellplatz[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);

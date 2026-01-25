@@ -44,7 +44,7 @@ type FormData = {
   kennzeichen: string;
   standort: string;
   besonderheit: string;
-  bild: File | null;
+  bild: File | null | string;
   flugzeugtyp: string;
   flugzeuggroesse: string;
   services: Record<string, boolean>;
@@ -222,7 +222,7 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
       throw new Error(msg || "Speichern fehlgeschlagen");
     }
 
-    router.push("/dashboard");
+    router.push("/stellplaetze/stellplaetzeDashboard");
   } catch (err: any) {
     alert(err.message);
   } finally {
@@ -269,7 +269,6 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
                 value={formData.besonderheit}
                 rows={5}
                 onChange={handleInputChange}
-                required
                 className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
               />
               <input
@@ -295,6 +294,7 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
         name="flugzeugtyp"
         className="w-full mb-2 rounded-md border px-3 py-2"
         value={formData.flugzeugtyp}
+        required
         onChange={handleInputChange}
       >
         <option value="">Flugzeugtyp auswählen</option>
@@ -311,6 +311,7 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
         name="flugzeuggroesse"
         value={formData.flugzeuggroesse}
         onChange={handleInputChange}
+        required
       >
         <option value="">Flugzeuggröße auswählen</option>
                 {hAnbieterInfos.flugzeugsgrösse.map((g) => (

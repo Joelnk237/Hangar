@@ -114,7 +114,7 @@ const handleDeleteStellplatz = async () => {
       className={`bg-white shadow-property dark:bg-darklight rounded-lg overflow-hidden`}
       data-aos="fade-up"
     >
-      <Link href={`/properties/properties-list/`} className={`group ${viewMode=="list" && 'flex' }`}>
+      <Link href={``} className={`group ${viewMode=="list" && 'flex' }`}>
         <div className={`relative ${viewMode=="list" && 'w-[30%]'}`}>
           <div className={`imageContainer h-[250px] w-full ${viewMode =="list" && 'h-full md:h-52'}`}>
             <Image
@@ -162,7 +162,7 @@ const handleDeleteStellplatz = async () => {
                   </span>{" "}
                   {serviceLabels}
                 </p>
-              )}
+              )}{!stellplatz.services || stellplatz.services.length <= 0 && (<p className="text-sm text-gray-600 dark:text-gray-300 mt-2">Keine Service</p>)}
             </div>
             {showActions && (
         <div className="flex justify-end gap-3 px-5 pb-4">

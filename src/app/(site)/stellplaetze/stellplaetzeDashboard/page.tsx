@@ -6,12 +6,12 @@ export const metadata: Metadata = {
   title: "Stellplaetze verwalten",
 };
 
-const Page = ({ searchParams }: any) => {
-  const category = searchParams?.category || ''; 
+const Page = () => {
+
 
   return (
     <>
-      <StellplaetzeDashboard category={category} />
+      <StellplaetzeDashboard />
     </>
   );
 };

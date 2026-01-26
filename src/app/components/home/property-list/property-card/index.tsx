@@ -144,6 +144,10 @@ const handleConsult = (e: React.MouseEvent) => {
           </button>
 
           <button
+            onClick={(e) =>{
+              e.preventDefault();
+              router.push(`/flugzeuge/${property.id}`)
+            } }
             className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
             title="bearbeiten"
           >

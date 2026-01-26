@@ -13,3 +13,5 @@ export type Stellplatz = {
     einheit: string;
   }[];
 };
+
+

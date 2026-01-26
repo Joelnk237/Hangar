@@ -6,6 +6,7 @@ import { Eye, Edit, Trash2 } from "lucide-react";
 import { Stellplatz } from "@/app/types/property/stellplatz";
 import { LockKeyhole, LockKeyholeOpen } from "lucide-react";
 import toast , { Toaster } from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
 
 interface StellplatzCardProps {
@@ -15,6 +16,7 @@ interface StellplatzCardProps {
 }
 
 const StellplatzCard: React.FC<StellplatzCardProps> = ({ stellplatz, viewMode, showActions }) => {
+  const router=useRouter();
   
   const [showDeleteModal, setShowDeleteModal] = React.useState(false);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
@@ -177,6 +179,10 @@ const handleDeleteStellplatz = async () => {
           </button>
 
           <button
+            onClick={(e) => {
+            e.preventDefault();
+            router.push(`/stellplaetze/stellplaetzeDashboard/edit/${stellplatz.id}`);
+          }}
             className="p-2 rounded-lg bg-yellow-100 text-yellow-600 hover:bg-yellow-500 hover:text-white transition"
             title="bearbeiten"
           >

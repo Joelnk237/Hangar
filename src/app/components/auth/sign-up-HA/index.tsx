@@ -366,7 +366,6 @@ const handleServiceUnit = (service: ServiceKey, value: string) => {
                 name="ansPartner"
                 value={formData.ansPartner}
                 onChange={handleChange}
-                required
                 className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
               />
             </div>

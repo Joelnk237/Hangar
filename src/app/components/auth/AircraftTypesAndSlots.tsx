@@ -90,6 +90,9 @@ const AircraftTypesAndSlots = ({ value, onChange }: AircraftTypesAndSlotsProps) 
             onChange={(e) => setNewType(e.target.value as FlugzeugTypEintrag["typ"])}
             className="rounded-md border border-border px-2 py-1"
           >
+            <option value="" disabled>
+              Flugzeugtyp auswählen
+            </option>
             {availableTypes.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -129,6 +132,9 @@ const AircraftTypesAndSlots = ({ value, onChange }: AircraftTypesAndSlotsProps) 
             onChange={(e) => setNewSize(e.target.value as FlugzeugGroesseEintrag["groesse"])}
             className="rounded-md border border-border px-2 py-1"
           >
+            <option value="" disabled>
+            Flugzeuggröße auswählen
+          </option>
             {availableSizes.map((s) => (
               <option key={s} value={s} title={flugzeugGroessenConfig[s]}>
                 {s}

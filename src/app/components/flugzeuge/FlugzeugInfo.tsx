@@ -220,16 +220,16 @@ const formatTermin = (isoString: string) => {
       <Section title="General">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <LabelValue label="Kennzeichen:" value={flugzeugInfos.flugzeug.kennzeichen} />
-          <LabelValue label="Baujahr:" value={flugzeugInfos.flugzeug.baujahr} />
+          <LabelValue label="Baujahr:" value={flugzeugInfos.flugzeug.baujahr!=null?flugzeugInfos.flugzeug.baujahr:"-"} />
           <LabelValue label="Flugzeugtyp:" value={flugzeugInfos.flugzeug.flugzeugtyp} />
           <LabelValue label="Flugzeuggröße:" value={flugzeugInfos.flugzeug.flugzeuggroesse} />
-          <LabelValue label="Flugstunden:" value={flugzeugInfos.flugzeug.flugstunden} />
-          <LabelValue label="Flugkilometer:" value={flugzeugInfos.flugzeug.flugkilometer} />
+          <LabelValue label="Flugstunden:" value={flugzeugInfos.flugzeug.flugstunden!=null?flugzeugInfos.flugzeug.flugstunden:"-"} />
+          <LabelValue label="Flugkilometer:" value={flugzeugInfos.flugzeug.flugkilometer!=null?flugzeugInfos.flugzeug.flugkilometer:"-"} />
           <LabelValue label="Abmaße:" value={flugzeugInfos.flugzeug.abmasse != null?`${flugzeugInfos.flugzeug.abmasse.fluegelspannweite}m / ${flugzeugInfos.flugzeug.abmasse.laenge}m / ${flugzeugInfos.flugzeug.abmasse.hoehe} m` : null} />
           <LabelValue label="Kategorie:" value={null} />
           <LabelValue
             label="Treibstoffverbrauch:"
-            value={`${flugzeugInfos.flugzeug.treibstoffverbrauch} L/h`}
+            value={flugzeugInfos.flugzeug.treibstoffverbrauch!= null?`${flugzeugInfos.flugzeug.treibstoffverbrauch} L/h`:"-"}
           />
           <LabelValue
             label="Frachtkapazität:"

@@ -25,6 +25,8 @@ type StellplatzInfos = {
     string,
     { enabled: boolean; price: number; unit: string }
   >;
+  bild:string;
+  availability: boolean;
   flugzeugtyp: string;
   flugzeugsgrösse: string;
   kennzeichen?: string;
@@ -229,7 +231,7 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
     setLoading(false);
   }
 };
-
+const existingImageUrl = mode === "edit" ? (stellplatzInfos?.bild != null): false;
 
   /* ------------------ JSX ------------------ */
   if (!hAnbieterInfos) {
@@ -271,13 +273,15 @@ const StellplatzForm = ({ mode, stellplatzInfos }: StellplatzFormProps) => {
                 onChange={handleInputChange}
                 className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
               />
-              <input
+              {!existingImageUrl && (<input
                 type="file"
                 placeholder="bild"
                 name="bild"
                 onChange={handleFileChange}
                 className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
-              />
+              />)}{existingImageUrl && (
+              <p className="text-sm text-gray-600 dark:text-gray-300 col-span-2"></p>
+            )}
             </div>
             
 

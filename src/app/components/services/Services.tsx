@@ -169,7 +169,7 @@ const confirmAddServices = async () => {
       body: JSON.stringify(payload),
     });
     setShowAddServiceModal(false);
-    router.push("/services");
+    window.location.reload();
   } catch (err) {
     alert("Fehler beim Hinzufügen der Services");
     console.error(err);
@@ -193,7 +193,7 @@ const saveService = async () => {
     });
     setEditingService(null);
     setServiceDraft(null);
-    router.push("/services");
+    window.location.reload();
   } catch (err) {
     alert("Fehler beim Aktualisieren des Services");
     console.error(err);
@@ -227,7 +227,7 @@ const saveNewZusatzservice = async () => {
       preis: "",
       einheit: "",
     });
-    router.push("/services");
+    window.location.reload();
   } catch (err) {
     alert("Fehler beim Erstellen des Zusatzservices");
     console.error(err);
@@ -252,7 +252,7 @@ const saveZusatz = async () => {
     });
     setEditingZusatzId(null);
     setZusatzDraft(null);
-    router.push("/services");
+    window.location.reload();
   } catch (err) {
     alert("Fehler beim Aktualisieren des Zusatzservices");
     console.error(err);
@@ -296,7 +296,7 @@ const executeDelete = async () => {
     setDeleteTarget(null);
 
     // reload
-    router.push("/services");
+    window.location.reload();
 
   } catch (err) {
     alert("Fehler beim Löschen");

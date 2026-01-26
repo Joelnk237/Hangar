@@ -137,8 +137,14 @@ public class MainVerticle extends VerticleBase {
     router.post("/api/auth/login").handler(this::loginHandler);
 
     router.get("/api/users/me")
-      .handler(jwtAuthHandler)   // 🔥 JWT Handling
+      .handler(jwtAuthHandler)   // JWT Handling
       .handler(this::getHomePage);
+
+    router.get("/api/hangaranbieter/dashboard")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::getHangaranbieterDashboard);
+
 
     router.post("/api/flugzeuge")
       .handler(jwtAuthHandler)  // JWT Handling
@@ -425,7 +431,7 @@ public class MainVerticle extends VerticleBase {
 
         String storedPassword = row.getString("passwort_hash");
 
-        // ⚠️ À améliorer plus tard avec BCrypt
+        // prüft, ob die Passwörter ubereinstimmen
         if (!storedPassword.equals(password)) {
           ctx.response().setStatusCode(401).end("Invalid credentials");
           return;
@@ -3780,8 +3786,136 @@ private void buchZusatzserviceHandler(RoutingContext ctx) {
       .mapEmpty();
   }
 
+  private void getHangaranbieterDashboard(RoutingContext ctx) {
 
+    UUID anbieterId = ctx.get("anbieterId");
 
+    String sql = """
+WITH
+stellplaetze_stats AS (
+  SELECT
+    hangaranbieter_id,
+    COUNT(*) AS total,
+    COUNT(*) FILTER (WHERE availability = true) AS frei,
+    COUNT(*) FILTER (WHERE availability = false) AS belegt
+  FROM stellplatz
+  GROUP BY hangaranbieter_id
+),
 
+reservierungen_stats AS (
+  SELECT
+    s.hangaranbieter_id,
+    COUNT(*) AS anzahl
+  FROM flugzeug_zu_stellplatz fzs
+  JOIN stellplatz s ON s.id = fzs.stellplatz_id
+  WHERE fzs.bis > current_date
+  GROUP BY s.hangaranbieter_id
+),
 
+anfragen_stats AS (
+  SELECT
+    hangaranbieter_id,
+    COUNT(*) AS anzahl
+  FROM angebot
+  WHERE inhalt IS NULL
+  GROUP BY hangaranbieter_id
+),
+
+termine_stats AS (
+  SELECT
+    hangaranbieter_id,
+    COUNT(*) AS anzahl
+  FROM uebergabe_rueckgabe_termin
+  WHERE termin_zeitpunkt >= now()
+  GROUP BY hangaranbieter_id
+)
+
+SELECT
+  h.id,
+  h.benutzer_id,
+  h.firmenname,
+  h.ansprechpartner,
+  h.telefon,
+  h.hangar_merkmale,
+
+  b.email,
+  b.strasse,
+  b.hausnummer,
+  b.plz,
+  b.ort,
+
+  COALESCE(sp.total, 0) AS stellplaetze_total,
+  COALESCE(sp.frei, 0) AS stellplaetze_frei,
+  COALESCE(sp.belegt, 0) AS stellplaetze_belegt,
+
+  COALESCE(r.anzahl, 0) AS reservierungen_anzahl,
+  COALESCE(a.anzahl, 0) AS anfragen_anzahl,
+  COALESCE(t.anzahl, 0) AS termine_anzahl
+
+FROM hangaranbieter h
+JOIN benutzer b ON b.id = h.benutzer_id
+
+LEFT JOIN stellplaetze_stats sp ON sp.hangaranbieter_id = h.id
+LEFT JOIN reservierungen_stats r ON r.hangaranbieter_id = h.id
+LEFT JOIN anfragen_stats a ON a.hangaranbieter_id = h.id
+LEFT JOIN termine_stats t ON t.hangaranbieter_id = h.id
+
+WHERE h.id = $1;
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(anbieterId))
+      .onFailure(err ->
+        ctx.response().setStatusCode(500).end(err.getMessage())
+      )
+      .onSuccess(rows -> {
+
+        if (!rows.iterator().hasNext()) {
+          ctx.response().setStatusCode(404).end("Hangaranbieter nicht gefunden");
+          return;
+        }
+
+        Row row = rows.iterator().next();
+
+        Object merkmaleObj = row.getValue("hangar_merkmale");
+        JsonObject merkmale = (merkmaleObj instanceof JsonObject)
+          ? (JsonObject) merkmaleObj
+          : new JsonObject(merkmaleObj.toString());
+
+        JsonObject response = new JsonObject()
+          .put("general", new JsonObject()
+            .put("id", row.getUUID("id").toString())
+            .put("benutzer_id", row.getUUID("benutzer_id").toString())
+            .put("firmenname", row.getString("firmenname"))
+            .put("email", row.getString("email"))
+            .put("tel", row.getString("telefon"))
+            .put("strasse", row.getString("strasse"))
+            .put("hausnummer", row.getString("hausnummer"))
+            .put("plz", row.getString("plz"))
+            .put("ort", row.getString("ort"))
+            .put("ansprechpartner", row.getString("ansprechpartner"))
+            .put("hangar_merkmale", merkmale)
+          )
+          .put("stellplaetze", new JsonObject()
+            .put("total", row.getLong("stellplaetze_total"))
+            .put("frei", row.getLong("stellplaetze_frei"))
+            .put("belegt", row.getLong("stellplaetze_belegt"))
+          )
+          .put("reservierungen", new JsonObject()
+            .put("anzahl", row.getLong("reservierungen_anzahl"))
+          )
+          .put("termine", new JsonObject()
+            .put("anzahl", row.getLong("termine_anzahl"))
+          )
+          .put("anfragen", new JsonObject()
+            .put("anzahl", row.getLong("anfragen_anzahl"))
+          );
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(response.encode());
+      });
+  }
+
+  
 }

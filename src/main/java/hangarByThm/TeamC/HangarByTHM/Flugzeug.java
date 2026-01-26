@@ -168,11 +168,18 @@ public class Flugzeug {
 
     f.setKennzeichen(json.getString("kennzeichen"));
     f.setBild(json.getString("bild"));
-    f.setFlugstunden(Integer.parseInt(json.getString("flugstunden")));
-    f.setBaujahr(Integer.parseInt(json.getString("baujahr")));
-    f.setFlugkilometer(Integer.parseInt(json.getString("flugkilometer")));
-    f.setTreibstoffverbrauch(Double.parseDouble(json.getString("treibstoffverbrauch")));
-    f.setFrachtkapazitaet(Integer.parseInt(json.getString("frachtkapazitaet")));
+    if(json.getString("flugstunden")!=null){
+      f.setFlugstunden(Integer.parseInt(json.getString("flugstunden")));
+    }
+    if(json.getString("flugkilometer")!=null){f.setFlugkilometer(Integer.parseInt(json.getString("flugkilometer")));}
+    if(json.getString("treibstoffverbrauch")!=null){
+      f.setTreibstoffverbrauch(Double.parseDouble(json.getString("treibstoffverbrauch")));
+    }
+
+    if(json.getString("baujahr")!=null){f.setBaujahr(Integer.parseInt(json.getString("baujahr")));}
+
+    if(json.getString("frachtkapazitaet")!=null){f.setFrachtkapazitaet(Integer.parseInt(json.getString("frachtkapazitaet")));}
+
 
     return f;
   }

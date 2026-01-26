@@ -34,10 +34,7 @@ import io.vertx.ext.auth.PubSecKeyOptions;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import static hangarByThm.TeamC.HangarByTHM.MainVerticle.DatabaseClient.client;
 
@@ -269,6 +266,18 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::hangaranbieterContextHandler)
       .handler(this::updateStellplatzAvailabilityHandler);
+
+    //Stellplatz aktualisieren
+    router.put("/api/stellplaetze/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::updateStellplatzHandler);
+
+
+
+    router.get("/api/stellplaetze/:id/toupdate")
+      .handler(this::getStellplatzHandler);
+
 
 
     //Stellplatz reservieren
@@ -3512,6 +3521,7 @@ private void buchZusatzserviceHandler(RoutingContext ctx) {
       });
   }
 
+  //Stellplatz löschen
   private void deleteStellplatzHandler(RoutingContext ctx) {
 
     UUID stellplatzId;
@@ -3573,5 +3583,205 @@ private void buchZusatzserviceHandler(RoutingContext ctx) {
         }
       });
   }
+
+  //Stellplatzinfos abrufen
+  private void getStellplatzHandler(RoutingContext ctx) {
+    UUID stellplatzId;
+
+    try {
+      stellplatzId = UUID.fromString(ctx.pathParam("id"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige Stellplatz-ID");
+      return;
+    }
+
+    String stellplatzSql = """
+    SELECT
+      id,
+      flugzeugtyp,
+      flugzeuggroesse,
+      standort,
+      bild,
+      kennzeichen,
+      besonderheit,
+      availability
+    FROM stellplatz
+    WHERE id = $1
+  """;
+
+    client.preparedQuery(stellplatzSql)
+      .execute(Tuple.of(stellplatzId))
+      .onFailure(err ->
+        ctx.response().setStatusCode(500).end(err.getMessage())
+      )
+      .onSuccess(rows -> {
+        if (!rows.iterator().hasNext()) {
+          ctx.response().setStatusCode(404).end("Stellplatz nicht gefunden");
+          return;
+        }
+
+        Row row = rows.iterator().next();
+
+        JsonObject stellplatzJson = new JsonObject()
+          .put("id", row.getUUID("id").toString())
+          .put("flugzeugtyp", row.getString("flugzeugtyp"))
+          .put("flugzeugsgrösse", row.getString("flugzeuggroesse"))
+          .put("standort", row.getString("standort"))
+          .put("bild", row.getString("bild"))
+          .put("kennzeichen", row.getString("kennzeichen"))
+          .put("besonderheit", row.getString("besonderheit"))
+          .put("availability", row.getBoolean("availability"));
+
+        fetchServicesForStellplatz(ctx, stellplatzId, stellplatzJson);
+      });
+  }
+
+  private void fetchServicesForStellplatz(
+    RoutingContext ctx,
+    UUID stellplatzId,
+    JsonObject stellplatzJson
+  ) {
+
+    String serviceSql = """
+    SELECT
+      s.bezeichnung,
+      os.preis,
+      os.einheit
+    FROM service_zu_stellplatz szs
+    JOIN service s ON s.id = szs.service_id
+    JOIN angebotene_services os ON os.service_id = s.id
+    WHERE szs.stellplatz_id = $1
+  """;
+
+    client.preparedQuery(serviceSql)
+      .execute(Tuple.of(stellplatzId))
+      .onFailure(err ->
+        ctx.response().setStatusCode(500).end(err.getMessage())
+      )
+      .onSuccess(rows -> {
+        JsonObject services = new JsonObject();
+
+        for (Row r : rows) {
+          services.put(
+            r.getString("bezeichnung"),
+            new JsonObject()
+              .put("enabled", true)
+              .put("price", r.getBigDecimal("preis"))
+              .put("unit", r.getString("einheit"))
+          );
+        }
+
+        stellplatzJson.put("services", services);
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(stellplatzJson.encode());
+      });
+  }
+
+
+  private void updateStellplatzHandler(RoutingContext ctx) {
+
+    UUID stellplatzId;
+    UUID anbieterId;
+
+    try {
+      stellplatzId = UUID.fromString(ctx.pathParam("id"));
+      anbieterId = ctx.get("anbieterId");
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige ID");
+      return;
+    }
+
+    String kennzeichen = ctx.request().getFormAttribute("kennzeichen");
+    String standort = ctx.request().getFormAttribute("standort");
+    String besonderheit = ctx.request().getFormAttribute("besonderheit");
+    String flugzeugtyp = ctx.request().getFormAttribute("flugzeugtyp");
+    String flugzeuggroesse = ctx.request().getFormAttribute("flugzeuggroesse");
+
+    // Bild (optional)
+    FileUpload upload = ctx.fileUploads().stream().findFirst().orElse(null);
+    if (!ctx.fileUploads().isEmpty()) {
+      upload = ctx.fileUploads().iterator().next();
+      String filename = upload.fileName();
+      String target = "uploads/stellplaetze/" + filename;
+
+      try {
+        Files.createDirectories(Path.of("uploads/stellplaetze"));
+        Files.move(Path.of(upload.uploadedFileName()), Path.of(target));
+      } catch (IOException e) {
+        ctx.fail(500, e);
+        return;
+      }
+    }
+
+    // ausgewählte Services
+    List<String> services =
+      ctx.request().formAttributes().getAll("services");
+
+    // Konstruktion SQL
+    StringBuilder sql = new StringBuilder("""
+    UPDATE stellplatz
+    SET
+      kennzeichen = $1,
+      standort = $2,
+      besonderheit = $3,
+      flugzeugtyp = $4,
+      flugzeuggroesse = $5
+  """);
+
+    List<Object> params = new ArrayList<>(List.of(
+      kennzeichen,
+      standort,
+      besonderheit,
+      flugzeugtyp,
+      flugzeuggroesse
+    ));
+
+    // bild vorhanden → update
+    if (upload != null) {
+      sql.append(", bild = $6 ");
+      params.add("/uploads/stellplaetze/" + upload.fileName());
+    }
+
+    sql.append(" WHERE id = $")
+      .append(params.size() + 1)
+      .append(" AND hangaranbieter_id = $")
+      .append(params.size() + 2);
+
+    params.add(stellplatzId);
+    params.add(anbieterId);
+
+    client.preparedQuery(sql.toString())
+      .execute(Tuple.tuple(params))
+      .compose(v -> deleteServicesForStellplatz(stellplatzId))
+      .compose(v -> insertServicesForStellplatz(stellplatzId, services))
+      .onSuccess(v ->
+        ctx.response()
+          .setStatusCode(200)
+          .end("Stellplatz aktualisiert")
+      )
+      .onFailure(err ->
+        ctx.response()
+          .setStatusCode(500)
+          .end(err.getMessage())
+      );
+  }
+
+  private Future<Void> deleteServicesForStellplatz(UUID stellplatzId) {
+
+    String sql = """
+    DELETE FROM service_zu_stellplatz
+    WHERE stellplatz_id = $1
+  """;
+
+    return client.preparedQuery(sql)
+      .execute(Tuple.of(stellplatzId))
+      .mapEmpty();
+  }
+
+
+
+
 
 }

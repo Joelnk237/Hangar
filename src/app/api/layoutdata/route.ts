@@ -17,8 +17,8 @@ const headerDataHAnbieter = [
     href: "#",
     submenu: [
       { label: "Angebotsanfragen", href: "/angebote/hangaranbieter" },
-      { label: "Reparaturanfragen", href: "#" },
-      { label: "Wartungsanfragen", href: "#" },
+      { label: "Anfragen", href: "/anfragen" },
+      { label: "Reparatur-/Wartungsanfragen", href: "#" },
     ],
   },
   {

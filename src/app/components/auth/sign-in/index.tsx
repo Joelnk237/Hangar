@@ -138,12 +138,12 @@ const Signin = () => {
             </div>
           </form>
 
-          <Link
+          {/*<Link
             href="/forgot-password"
             className="mb-2 inline-block text-base text-dark hover:text-primary dark:text-white dark:hover:text-primary"
           >
             Forget Password?
-          </Link>
+          </Link>*/}
           <p className="text-body-secondary text-base">
             Not a member yet?{" "}
             <Link href="/signup" className="text-body-secondary hover:text-primary">

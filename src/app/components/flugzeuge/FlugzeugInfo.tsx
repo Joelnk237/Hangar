@@ -62,6 +62,12 @@ const [terminDate, setTerminDate] = useState("");
 const [terminTime, setTerminTime] = useState("");
 const [istUebergabe, setIstUebergabe] = useState<boolean>(true);
 const [terminLoading, setTerminLoading] = useState(false);
+
+const [showAnfrageModal, setShowAnfrageModal] = useState(false);
+const [betreff, setBetreff] = useState("");
+const [inhalt, setInhalt] = useState("");
+const [sendingAnfrage, setSendingAnfrage] = useState(false);
+
 const router=useRouter();
 
 
@@ -194,6 +200,47 @@ const handleConfirmTermin = async () => {
     setTerminLoading(false);
   }
 };
+
+const handleSendAnfrage = async () => {
+  if (!betreff || !inhalt) return;
+
+  setSendingAnfrage(true);
+
+  try {
+    const token = localStorage.getItem("token");
+
+    const payload = {
+      hangaranbieter_id: flugzeugInfos.hangar.hangaranbieterId,
+      stellplatz_id: flugzeugInfos.hangar.stellplatz_id,
+      flugzeug_id: flugzeugInfos.flugzeug.id,
+      betreff,
+      inhalt,
+    };
+
+    const res = await fetch("http://localhost:8888/api/anfragen", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) throw new Error("Fehler beim Senden der Anfrage");
+
+    toast.success("Anfrage erfolgreich gesendet");
+    setShowAnfrageModal(false);
+    setBetreff("");
+    setInhalt("");
+
+  } catch (err) {
+    console.error(err);
+    toast.error("Anfrage konnte nicht gesendet werden");
+  } finally {
+    setSendingAnfrage(false);
+  }
+};
+
 const formatTermin = (isoString: string) => {
   const date = new Date(isoString);
 
@@ -334,7 +381,8 @@ const formatTermin = (isoString: string) => {
             Zusatzservice buchen
           </button>
           <button
-            className="px-4 py-2 rounded border border-gray-500 text-gray-600 hover:bg-gray-600 hover:text-white transition"
+            onClick={() => setShowAnfrageModal(true)}
+            className="px-4 py-2 rounded border border-primary text-primary hover:bg-primary hover:text-white transition"
           >
             Anfrage an Anbieter stellen
           </button>
@@ -467,6 +515,54 @@ const formatTermin = (isoString: string) => {
           Bestätigen
         </button>
       </div>
+    </div>
+  </div>
+)}
+  {showAnfrageModal && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white dark:bg-semidark rounded-lg p-6 w-full max-w-lg space-y-4">
+
+      <h2 className="text-lg font-semibold">
+        Anfrage an den Hangaranbieter
+      </h2>
+
+      <div>
+        <label className="block text-sm mb-1">Betreff</label>
+        <input
+          type="text"
+          className="w-full border rounded px-3 py-2"
+          value={betreff}
+          onChange={(e) => setBetreff(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm mb-1">Nachricht</label>
+        <textarea
+          className="w-full border rounded px-3 py-2 min-h-[120px]"
+          value={inhalt}
+          onChange={(e) => setInhalt(e.target.value)}
+        />
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4">
+        <button
+          onClick={() => setShowAnfrageModal(false)}
+          className="px-4 py-2 border rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+        >
+          Abbrechen
+        </button>
+
+        <button
+          disabled={!betreff || !inhalt || sendingAnfrage}
+          onClick={handleSendAnfrage}
+          className="px-4 py-2 bg-primary text-white rounded
+                     hover:bg-primary/90 disabled:opacity-50"
+        >
+          Bestätigen
+        </button>
+      </div>
+
     </div>
   </div>
 )}

@@ -31,6 +31,8 @@ const Page = ({ params }: PageProps) => {
     fetchStellplatz();
   }, [id]);
 
+  
+
   if (loading) return <div>Loading...</div>;
   if (error) return <div>{error}</div>;
   if (!stellplatzFromDB) return <div>Details nicht gefunden</div>;

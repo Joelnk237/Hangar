@@ -52,7 +52,7 @@ const Reservierungen = ({ reservierungen }: Props) => {
       setSelected(null);
 
       // 
-      router.refresh();
+      window.location.reload();
     } catch (err) {
       console.error(err);
       alert("Fehler beim Stornieren der Reservierung");

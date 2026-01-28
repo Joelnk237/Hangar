@@ -145,6 +145,35 @@ const handleConfirmReservation = async () => {
   }
 };
 
+const handleDetailsInfosClick = async () => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const payload = {
+      hangaranbieterId: stellplatz.anbieterId,
+      stellplatzId: stellplatz.id,
+    };
+
+    const res = await fetch("http://localhost:8888/api/anfragen/detailsinfos", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) throw new Error("Anfrage fehlgeschlagen");
+
+    toast.success("Ihre Anfrage nach Detailinfos wurde versendet!");
+
+  } catch (err) {
+    console.error(err);
+    toast.error("Fehler beim Versenden der Anfrage");
+  }
+};
+
+
 
 
 
@@ -235,7 +264,7 @@ const handleConfirmReservation = async () => {
 
         {/* Besonderheiten */}
         <div>
-          <h4 className="font-semibold mb-6 text-midnight_text dark:mb-2">Besonderheiten</h4>
+          <h4 className="font-semibold mb-6 text-midnight_text dark:mb-2">Besonderheiten</h4>{stellplatz.id}
           <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
             {stellplatz.besonderheiten || "Keine Besonderheiten angegeben."}
           </p>
@@ -258,6 +287,7 @@ const handleConfirmReservation = async () => {
           </button>
 
           <button
+            onClick={handleDetailsInfosClick}
             className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             DetailInfos anfordern

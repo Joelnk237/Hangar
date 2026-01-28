@@ -18,7 +18,11 @@
     <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V25__add_column_stellplatzID.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V26__create_Angebot_Table.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V27__addColum_FlugzeugId.sql" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V28__create_Anfrage_Table.sql" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V29__create_Nachricht_Table.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V2__createFBesitzerTable.sql" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V30__1create_trigger_delete_reservierung.sql" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V31__add_column_Betreff.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V3__createHAnbieterTable.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V4__FlugzeugtypUndFlugzeugsgroessen.sql" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/src/main/resources/db/migrations/V5__createServiceTable.sql" dialect="GenericSQL" />

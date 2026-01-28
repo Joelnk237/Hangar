@@ -366,9 +366,17 @@ public class MainVerticle extends VerticleBase {
       .handler(jwtAuthHandler)
       .handler(this::terminMeHandler);
 
+    //Detailsinfos anfordern
+    router.post("/api/anfragen/detailsinfos")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::createDetailsinfosAnfrageHandler);
 
-
-
+    //Anfrage an HA
+    router.post("/api/anfragen")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::createAnfrageHandler);
 
 
 
@@ -2753,6 +2761,21 @@ private void buchZusatzserviceHandler(RoutingContext ctx) {
         return client.preparedQuery(deleteSql)
           .execute(Tuple.of(stellplatzId, flugzeugId));
       })
+      .compose(deleteResult -> {
+        if (deleteResult.rowCount() == 0) {
+          return Future.failedFuture("NOT_FOUND");
+        }
+
+        //UPDATE Flugzeug status
+        String updateFlugzeugSql = """
+        UPDATE flugzeug
+        SET belegt = false
+        WHERE id = $1
+      """;
+
+        return client.preparedQuery(updateFlugzeugSql)
+          .execute(Tuple.of(flugzeugId));
+      })
       .onSuccess(res -> {
         if (res.rowCount() == 0) {
           ctx.response().setStatusCode(404).end("Reservierung nicht gefunden");
@@ -3917,5 +3940,185 @@ WHERE h.id = $1;
       });
   }
 
+  //Detailsinfos anfordern
+  private void createDetailsinfosAnfrageHandler(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+
+    JsonObject body = ctx.body().asJsonObject();
+    if (body == null) {
+      ctx.response().setStatusCode(400).end("Request body fehlt");
+      return;
+    }
+
+    UUID stellplatzId;
+    UUID hangaranbieterId;
+
+    try {
+      stellplatzId = UUID.fromString(body.getString("stellplatzId"));
+      hangaranbieterId = UUID.fromString(body.getString("hangaranbieterId"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige UUID");
+      return;
+    }
+
+    // Check ob die gleiche Anfrage schon vorhanden ist
+    String checkSql = """
+    SELECT 1
+    FROM anfrage
+    WHERE flugzeugbesitzer_id = $1
+      AND hangaranbieter_id = $2
+      AND stellplatz_id = $3
+      AND is_detailsinfos = true
+  """;
+
+    client.preparedQuery(checkSql)
+      .execute(Tuple.of(
+        flugzeugbesitzerId,
+        hangaranbieterId,
+        stellplatzId
+      ))
+      .compose(rows -> {
+
+        // Anfrage schon vorhanden
+        if (rows.iterator().hasNext()) {
+          return Future.succeededFuture();
+        }
+
+        // INSERTION
+        String insertSql = """
+        INSERT INTO anfrage (
+          flugzeugbesitzer_id,
+          hangaranbieter_id,
+          stellplatz_id,
+          is_detailsinfos
+        )
+        VALUES ($1, $2, $3, true)
+      """;
+
+        return client.preparedQuery(insertSql)
+          .execute(Tuple.of(
+            flugzeugbesitzerId,
+            hangaranbieterId,
+            stellplatzId
+          ))
+          .mapEmpty();
+      })
+      .onSuccess(v -> {
+        ctx.response()
+          .setStatusCode(200)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Detailinfos-Anfrage erfolgreich übermittelt")
+            .encode()
+          );
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response().setStatusCode(500).end("Serverfehler");
+      });
+  }
+
+  //Anfrage stellen
+  private void createAnfrageHandler(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+    JsonObject body = ctx.body().asJsonObject();
+
+    if (body == null) {
+      ctx.response().setStatusCode(400).end("Request body fehlt");
+      return;
+    }
+
+    UUID hangaranbieterId;
+    UUID stellplatzId;
+    UUID flugzeugId;
+    String betreff;
+    String inhalt;
+
+    try {
+      hangaranbieterId = UUID.fromString(body.getString("hangaranbieter_id"));
+      stellplatzId = UUID.fromString(body.getString("stellplatz_id"));
+      flugzeugId = UUID.fromString(body.getString("flugzeug_id"));
+      betreff = body.getString("betreff");
+      inhalt = body.getString("inhalt");
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige Parameter");
+      return;
+    }
+
+    if (betreff == null || betreff.isBlank() || inhalt == null || inhalt.isBlank()) {
+      ctx.response().setStatusCode(400).end("Betreff und Inhalt sind erforderlich");
+      return;
+    }
+
+    // Spam-Check
+    String checkSql = """
+    SELECT 1
+    FROM anfrage
+    WHERE flugzeugbesitzer_id = $1
+      AND hangaranbieter_id = $2
+      AND stellplatz_id = $3
+      AND flugzeug_id = $4
+      AND betreff = $5
+      AND inhalt = $6
+      AND is_detailsinfos = false
+    LIMIT 1
+  """;
+
+    client.preparedQuery(checkSql)
+      .execute(Tuple.of(
+        flugzeugbesitzerId,
+        hangaranbieterId,
+        stellplatzId,
+        flugzeugId,
+        betreff,
+        inhalt
+      ))
+      .compose(rows -> {
+
+        // Anfrage existiert bereits → kein Insert, aber OK
+        if (rows.iterator().hasNext()) {
+          return Future.succeededFuture();
+        }
+
+        // Insert
+        String insertSql = """
+        INSERT INTO anfrage (
+          flugzeugbesitzer_id,
+          hangaranbieter_id,
+          stellplatz_id,
+          flugzeug_id,
+          betreff,
+          inhalt,
+          is_detailsinfos
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, false)
+      """;
+
+        return client.preparedQuery(insertSql)
+          .execute(Tuple.of(
+            flugzeugbesitzerId,
+            hangaranbieterId,
+            stellplatzId,
+            flugzeugId,
+            betreff,
+            inhalt
+          ));
+      })
+      .onSuccess(res -> {
+        ctx.response()
+          .setStatusCode(200)
+          .putHeader("Content-Type", "application/json")
+          .end(new JsonObject()
+            .put("message", "Anfrage erfolgreich gesendet")
+            .encode()
+          );
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response().setStatusCode(500).end("Serverfehler");
+      });
+  }
   
 }

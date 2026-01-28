@@ -378,7 +378,16 @@ public class MainVerticle extends VerticleBase {
       .handler(this::flugzeugbesitzerContextHandler)
       .handler(this::createAnfrageHandler);
 
+    //GET Anfragen (Hangaranbieter)
+    router.get("/api/anfragen")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::getAnfragenForHangaranbieter);
 
+    //Anfrage löschen
+    router.delete("/api/anfragen/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::deleteAnfrageHandler);
 
 
 
@@ -4120,5 +4129,143 @@ WHERE h.id = $1;
         ctx.response().setStatusCode(500).end("Serverfehler");
       });
   }
-  
+
+  //GET ANfragen
+  private void getAnfragenForHangaranbieter(RoutingContext ctx) {
+
+    UUID anbieterId = ctx.get("anbieterId");
+
+    if (anbieterId == null) {
+      ctx.response().setStatusCode(401).end("Unauthorized");
+      return;
+    }
+
+    String sql = """
+    SELECT
+      a.id AS anfrage_id,
+      a.is_detailsinfos,
+      a.answered,
+      a.betreff,
+      a.inhalt,
+
+      s.id AS stellplatz_id,
+      s.kennzeichen AS stellplatz_kennzeichen,
+      s.standort AS stellplatz_standort,
+
+      ha.id AS hangaranbieter_id,
+      ha.firmenname,
+
+      fb.id AS flugzeugbesitzer_id,
+      b.name AS flugzeugbesitzer_name,
+      b.email AS flugzeugbesitzer_email,
+
+      f.id AS flugzeug_id,
+      f.kennzeichen AS flugzeug_kennzeichen
+
+    FROM anfrage a
+    JOIN stellplatz s ON s.id = a.stellplatz_id
+    JOIN hangaranbieter ha ON ha.id = a.hangaranbieter_id
+    JOIN flugzeugbesitzer fb ON fb.id = a.flugzeugbesitzer_id
+    JOIN benutzer b ON b.id = fb.benutzer_id
+    LEFT JOIN flugzeug f ON f.id = a.flugzeug_id
+
+    WHERE a.hangaranbieter_id = $1
+    ORDER BY a.created_at DESC
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(anbieterId))
+      .onSuccess(rows -> {
+
+        JsonArray result = new JsonArray();
+
+        for (Row row : rows) {
+          JsonObject anfrage = new JsonObject()
+            .put("id", row.getInteger("anfrage_id"))
+            .put("is_detailsinfos", row.getBoolean("is_detailsinfos"))
+            .put("answered", row.getBoolean("answered"))
+            .put("betreff", row.getString("betreff"))
+            .put("inhalt", row.getString("inhalt"))
+
+            .put("stellplatz", new JsonObject()
+              .put("id", row.getUUID("stellplatz_id"))
+              .put("kennzeichen", row.getString("stellplatz_kennzeichen"))
+              .put("standort", row.getString("stellplatz_standort"))
+            )
+
+            .put("hangaranbieter", new JsonObject()
+              .put("id", row.getUUID("hangaranbieter_id"))
+              .put("firmenname", row.getString("firmenname"))
+            )
+
+            .put("flugzeugbesitzer", new JsonObject()
+              .put("id", row.getUUID("flugzeugbesitzer_id"))
+              .put("name", row.getString("flugzeugbesitzer_name"))
+              .put("email", row.getString("flugzeugbesitzer_email"))
+            )
+
+            .put("flugzeug", row.getUUID("flugzeug_id") == null
+              ? null
+              : new JsonObject()
+              .put("id", row.getUUID("flugzeug_id"))
+              .put("kennzeichen", row.getString("flugzeug_kennzeichen"))
+            );
+
+          result.add(anfrage);
+        }
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(result.encode());
+
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Fehler beim Laden der Anfragen");
+      });
+  }
+
+
+  private void deleteAnfrageHandler(RoutingContext ctx) {
+
+    Integer anfrageId;
+    try {
+      anfrageId = Integer.parseInt(ctx.pathParam("id"));
+    } catch (Exception e) {
+      ctx.response()
+        .setStatusCode(400)
+        .end("Ungültige Anfrage-ID");
+      return;
+    }
+
+    String sql = """
+    DELETE FROM anfrage
+    WHERE id = $1
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(anfrageId))
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response()
+            .setStatusCode(404)
+            .end("Anfrage nicht gefunden");
+        } else {
+          ctx.response()
+            .setStatusCode(204) // No Content
+            .end();
+        }
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("Serverfehler");
+      });
+  }
+
+
+
 }

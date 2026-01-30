@@ -1,187 +1,78 @@
 "use client";
-import Link from "next/link";
-import SocialSignUp from "../social-button/SocialSignUp";
+
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Loader from "../../shared/Loader";
-import Logo from "../../layout/header/logo";
-import ServiceCard from "../ServiceCard";
-import AircraftTypesAndSlots from "../AircraftTypesAndSlots";
-import { HangarMerkmale } from "@/app/types/property/hangaranbieter";
+import { HangaranbieterInfosTyp, HangaranbieterSpezialisierungen, HangarMerkmale } from "@/app/types/property/hangaranbieter";
 import toast from "react-hot-toast";
-const SignUp = () => {
-  const router = useRouter();
 
-type FlugzeugTypEintrag = {
-  typ: "SEP" | "MEP" | "Helikopter" | "Jet" | "Turboprop" | "Ultraleicht";
-  stellplaetze: number;
+type Props = {
+  initialData: HangaranbieterInfosTyp;
+  initialSpezialisierungen: HangaranbieterSpezialisierungen;
+  onCancel: () => void;
+  onSaved: (data: any) => void;
 };
 
-type FlugzeugGroesseEintrag = {
-  groesse: "XS" | "S" | "M" | "L" | "XL";
-  stellplaetze: number;
-};
+export default function HangaranbieterEditForm({
+  initialData,
+  initialSpezialisierungen,
+  onCancel,
+  onSaved,
+}: Props) {
 
-const [flugzeugtypen, setFlugzeugtypen] = useState<FlugzeugTypEintrag[]>([]);
-const [flugzeuggroessen, setFlugzeuggroessen] = useState<FlugzeugGroesseEintrag[]>([]);
-
-
-const initialHangarMerkmale: HangarMerkmale = {
-  wetterschutz: {
-    enabled: false,
-    voll: false,
-    teil: false,
-  },
-  flugfeld: {
-    enabled: false,
-    asphalt: false,
-    gras: false,
-  },
-  zugang24h: {
-    enabled: false,
-    code: false,
-    chip: false,
-  },
-  wachschutz: {
-    enabled: false,
-    alarm: false,
-    zutritt: false,
-  },
-  video: {
-    enabled: false,
-    live: false,
-    recording24h: false,
-  },
-};
-
-
-  //Services TYpen : Datenstruktrur
-  const initialServices = {
-  einlagerung: {
-    enabled: false,
-    price: "",
-    unit: "pro Tag",
-  },
-  flugbereitschaft: {
-    enabled: false,
-    price: "",
-    unit: "pro Vorgang",
-  },
-  tanken: {
-    enabled: false,
-    price: "",
-    unit: "pro Liter",
-  },
-  reinigung: {
-    enabled: false,
-    price: "",
-    unit: "komplett",
-  },
-} as const;
-
-type ServiceKey = keyof typeof initialServices;
-
-type AircraftSlots = {
-  aircraftTypes: string[];
-  slotsPerType: Record<string, number>;
-};
-
-  const [loading, setLoading] = useState(false);
-  type FormData = {
-  firmenname: string;
-  ansPartner: string;
-  email: string;
-  tel: string;
-  password: string;
-  strasse: string;
-  hNr: string;
-  plz: string;
-  ort: string;
-  hangarMerkmale: HangarMerkmale;
-  services: typeof initialServices;
-  flugzeugtypUndStellplaetze: AircraftSlots;
-};
-
-  const [formData, setFormData] = useState<FormData>({
-    firmenname: "",
-    ansPartner: "",
-    email: "",
-    tel: "",
-    password: "",
-    strasse: "",
-    hNr: "",
-    plz: "",
-    ort: "",
-    hangarMerkmale: structuredClone(initialHangarMerkmale),
-
-  services: structuredClone(initialServices),
-
-  flugzeugtypUndStellplaetze: {
-      aircraftTypes: [],
-      slotsPerType: {},
-    },
+  const [formData, setFormData] = useState({
+    firmenname: initialData.firmenname,
+    ansprechpartner: initialData.ansprechpartner ?? "",
+    email: initialData.email,
+    tel: initialData.tel,
+    strasse: initialData.strasse,
+    hausnummer: initialData.hausnummer,
+    plz: initialData.plz,
+    ort: initialData.ort,
+    hangarMerkmale: structuredClone(initialData.hangar_merkmale),
   });
+    const [loading, setLoading] = useState(false);
+  const [spezialisierungen, setSpezialisierungen] = useState(initialSpezialisierungen);
+  const ALL_FLUGZEUGTYPEN = ["SEP", "MEP", "Helikopter", "Jet", "Turboprop", "Ultraleicht"] as const;
+const ALL_FLUGZEUGGROESSEN = ["XS", "S", "M", "L", "XL"] as const;
 
-  //state für Error Handling
-  const [serviceErrors, setServiceErrors] = useState<Record<string, string>>({});
+type FlugzeugTyp = typeof ALL_FLUGZEUGTYPEN[number];
+type FlugzeugGroesse = typeof ALL_FLUGZEUGGROESSEN[number];
 
-  // schon definierte Flugzeugtypen
-  const availableAircraftTypes = ["Cessna 172", "Piper PA-28", "Beechcraft Bonanza"];
-  const [errors, setErrors] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
+const [flugzeugtypen, setFlugzeugtypen] = useState<FlugzeugTyp[]>(
+  (initialSpezialisierungen?.flugzeugtypen ?? []).filter((t): t is FlugzeugTyp =>
+    ALL_FLUGZEUGTYPEN.includes(t as FlugzeugTyp)
+  )
+);
 
-  // Validation functions
-  const validateName = (name: string) => {
-    if (!name.trim()) return "Name is required";
-    if (!/^[a-zA-Z\s]{3,}$/.test(name)) return "Name must be at least 3 characters and contain only letters";
-    return "";
-  };
+const [flugzeuggroessen, setFlugzeuggroessen] = useState<FlugzeugGroesse[]>(
+  (initialSpezialisierungen?.flugzeuggroessen ?? []).filter((g): g is FlugzeugGroesse =>
+    ALL_FLUGZEUGGROESSEN.includes(g as FlugzeugGroesse)
+  )
+);
 
-  const validateEmail = (email: string) => {
-    if (!email.trim()) return "Email is required";
-    if (!/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(email)) return "Enter a valid email address";
-    return "";
-  };
 
-  const validatePassword = (password: string) => {
-    if (!password.trim()) return "Password is required";
-    if (password.length < 6) return "Password must be at least 6 characters";
-    return "";
-  };
+  
 
-  // Validate Service
-  const validateServices = (): Partial<Record<ServiceKey, string>> => {
-  const errors: Partial<Record<ServiceKey, string>> = {};
+  const addFlugzeugtyp = (typ: FlugzeugTyp) => {
+  setFlugzeugtypen(prev => prev.includes(typ) ? prev : [...prev, typ]);
+};
 
-  (Object.keys(formData.services) as ServiceKey[]).forEach((key) => {
-    const service = formData.services[key];
-    if (service.enabled && (!service.price || Number(service.price) <= 0)) {
-      errors[key] = "Bitte einen gültigen Preis angeben";
-    }
-  });
+const removeFlugzeugtyp = (typ: FlugzeugTyp) => {
+  setFlugzeugtypen(prev => prev.filter(t => t !== typ));
+};
 
-  return errors;
+const addGroesse = (g: FlugzeugGroesse) => {
+  setFlugzeuggroessen(prev => prev.includes(g) ? prev : [...prev, g]);
+};
+
+const removeGroesse = (g: FlugzeugGroesse) => {
+  setFlugzeuggroessen(prev => prev.filter(x => x !== g));
 };
 
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-
-    // Validate on change
-    setErrors((prev) => ({
-      ...prev,
-      [name]: name === "firmenname"
-        ? validateName(value)
-        : name === "email"
-          ? validateEmail(value)
-          : validatePassword(value),
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
-
  
 const toggleMerkmal = (key: keyof HangarMerkmale) => {
   setFormData(prev => ({
@@ -210,48 +101,6 @@ const toggleMerkmalOption = <
       [category]: {
         ...prev.hangarMerkmale[category],
         [option]: !prev.hangarMerkmale[category][option],
-      },
-    },
-  }));
-};
-
-
-
-//Manage Services
-const handleServiceToggle = (service: ServiceKey) => {
-  setFormData(prev => ({
-    ...prev,
-    services: {
-      ...prev.services,
-      [service]: {
-        ...prev.services[service],
-        enabled: !prev.services[service].enabled,
-      },
-    },
-  }));
-};
-
-const handleServicePrice = (service: ServiceKey, value: string) => {
-  setFormData(prev => ({
-    ...prev,
-    services: {
-      ...prev.services,
-      [service]: {
-        ...prev.services[service],
-        price: value,
-      },
-    },
-  }));
-};
-
-const handleServiceUnit = (service: ServiceKey, value: string) => {
-  setFormData(prev => ({
-    ...prev,
-    services: {
-      ...prev.services,
-      [service]: {
-        ...prev.services[service],
-        unit: value,
       },
     },
   }));
@@ -292,7 +141,7 @@ const validateHangarMerkmale = (merkmale: HangarMerkmale): string | null => {
     if (block.enabled) {
       const hasOne = c.options.some(opt => block[opt]);
       if (!hasOne) {
-        return `Bitte eine Option für ${c.label} auswählen`;
+        return `Bitte mindestens eine Option für ${c.label} auswählen`;
       }
     }
   }
@@ -301,87 +150,79 @@ const validateHangarMerkmale = (merkmale: HangarMerkmale): string | null => {
 };
 
 
-// Manage submit
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
 
-    // Validate all fields before submitting
-    const error = validateHangarMerkmale(formData.hangarMerkmale);
+  const error = validateHangarMerkmale(formData.hangarMerkmale);
   if (error) {
     toast.error(error);
     setLoading(false);
     return;
   }
-    setLoading(true);
-    try {
 
-      //Bereite das JSON für das Backend vor
-    const payload = {
-      rolle: "hangaranbieter",
-      name: formData.firmenname,
-      ansPartner: formData.ansPartner,
-      email: formData.email,
-      tel: formData.tel,
-      password: formData.password,
-      adresse: {
-        strasse: formData.strasse,
-        hausnummer: formData.hNr,
-        plz: formData.plz,
-        ort: formData.ort
-      },
-      hangarMerkmale: formData.hangarMerkmale,
-      services: formData.services,
+  const payload = {
+    ...formData,
+    spezialisierungen: {
       flugzeugtypen,
-      flugzeuggroessen,
-
-    };
-
-    //POST-Request zum Vert.x Backend
-    const res = await fetch("http://localhost:8888/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-  const errData = await res.json();
-
-  if (errData.error === "EMAIL_ALREADY_EXISTS") {
-    toast.error("Diese E-Mail wird bereits verwendet");
-    //throw new Error("Diese E-Mail wird bereits verwendet");
-    return;
-    
-  }
-
-  //throw new Error(errData.message || "Registration failed");
-}
-
-    const data = await res.json();
-      //await new Promise((resolve) => setTimeout(resolve, 2000));
-      //localStorage.setItem("user", JSON.stringify(data.user));
-      router.push("/");
-    } catch (error: any) {
-      console.error("Registration Error:", error);
-    alert(error.message || "Ein Fehler ist aufgetreten");
-    } finally {
-      setLoading(false);
+      flugzeuggroessen
     }
   };
 
+  try {
+    const res = await fetch("http://localhost:8888/api/hangaranbieter/update", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+
+      if (res.status === 409 && text === "EMAIL_ALREADY_USED") {
+        toast.error("Diese Email existiert bereits im System");
+        return;
+      }
+
+      if (text.startsWith("FLUGZEUGTYP_IN_USE")) {
+        toast.error("Einer deiner Stellplätze benutzt noch den Flugzeugtyp: " + text.split(":")[1]);
+        return;
+      }
+
+      if (text.startsWith("FLUGZEUGGROESSE_IN_USE")) {
+        toast.error("Einer deiner Stellplätze benutzt noch die Größe: " + text.split(":")[1]);
+        return;
+      }
+
+      throw new Error(text);
+    }
+
+    const updated = await res.text();
+    onSaved(updated);
+    toast.success("Profil erfolgreich aktualisiert ✅");
+    window.location.reload();
+
+  } catch (err) {
+    console.error(err);
+    toast.error("Update fehlgeschlagen");
+  } finally {
+    setLoading(false);
+  }
+};
+
   return (
-    <div className="pt-20 pb-32 bg-light dark:bg-darkmode">
-      <div className="pt-11 flex justify-center items-center text-center ">
-        <div className="max-w-4xl w-full bg-white dark:bg-semidark px-8 py-14 sm:px-12 md:px-16 rounded-lg">
-          <div className="mb-10 text-center mx-auto inline-block max-w-[160px]">
-            <Logo />
-          </div>
+    <div className="pt-24 pb-32 bg-light dark:bg-darkmode">
+      <div className="max-w-4xl mx-auto bg-white dark:bg-semidark p-10 rounded-lg shadow">
 
+        <h2 className="text-2xl font-bold mb-6">Profil bearbeiten</h2>
 
-          
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <h3 className="font-semibold mb-2">General</h3>
 
-          <form onSubmit={handleSubmit}>
-            {/*<h3 className="text-base text-midnight_text font-semibold mb-4">Persönliche Daten</h3>*/}
-            <div className="mb-4 flex gap-4">
+          <div className="mb-4 flex gap-4">
               <input
                 type="text"
                 placeholder="Firmenname"
@@ -394,8 +235,8 @@ const validateHangarMerkmale = (merkmale: HangarMerkmale): string | null => {
               <input
                 type="text"
                 placeholder="Ansprechpartner (Optional)"
-                name="ansPartner"
-                value={formData.ansPartner}
+                name="ansprechpartner"
+                value={formData.ansprechpartner}
                 onChange={handleChange}
                 className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
               />
@@ -420,18 +261,8 @@ const validateHangarMerkmale = (merkmale: HangarMerkmale): string | null => {
                 className="w-full rounded-md border border-border dark:border-darkborder  bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
               />
             </div>
-            <div className="mb-4">
-              <input
-                type="password"
-                placeholder="Password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                className="w-full rounded-md border border-border dark:border-darkborder border-solid bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
-              />
-            </div>
-            <div className="mb-4 flex gap-4">
+
+          <div className="mb-4 flex gap-4">
               <input
                 type="text"
                 placeholder="Straße"
@@ -444,8 +275,8 @@ const validateHangarMerkmale = (merkmale: HangarMerkmale): string | null => {
               <input
                 type="text"
                 placeholder="Hausnummer"
-                name="hNr"
-                value={formData.hNr}
+                name="hausnummer"
+                value={formData.hausnummer}
                 onChange={handleChange}
                 required
                 className="w-full rounded-md border border-border dark:border-darkborder border-solid bg-transparent px-5 py-3 text-base text-midnight_text outline-none transition placeholder:text-gray-300 focus:border-primary focus-visible:shadow-none dark:text-white dark:focus:border-primary"
@@ -472,12 +303,82 @@ const validateHangarMerkmale = (merkmale: HangarMerkmale): string | null => {
               />
             </div>
 
-            <div className="mb-8">
-              <h3 className="text-base text-midnight_text font-semibold mb-3 text-midnight_text dark:text-white">
-                Hangar-Merkmale
-              </h3>
- {/* Sektion Hangar-Merkmale */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h3 className="font-semibold mb-2">Spezialisierungen</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    {/* Flugzeugtypen Select */}
+    <div>
+      <label className="block text-sm font-medium mb-2">Flugzeugtypen auswählen</label>
+
+      <select
+        className="w-full rounded-md border px-4 py-2 bg-transparent"
+        onChange={(e) => addFlugzeugtyp(e.target.value as FlugzeugTyp)}
+        defaultValue=""
+      >
+        <option value="" disabled>Typ auswählen</option>
+        {ALL_FLUGZEUGTYPEN.map(t => (
+          <option key={t} value={t}>{t}</option>
+        ))}
+      </select>
+
+      {/* Tags */}
+      <div className="flex flex-wrap gap-2 mt-2">
+        {flugzeugtypen.map(t => (
+          <span key={t} className="bg-primary/10 text-primary px-2 py-1 rounded flex items-center gap-1">
+            {t}
+            <button
+              type="button"
+              onClick={() => removeFlugzeugtyp(t)}
+              className="text-red-500 font-bold"
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+      </div>
+    </div>
+
+
+    {/* Flugzeuggrößen Select */}
+    <div>
+      <label className="block text-sm font-medium mb-2">Flugzeuggrößen auswählen</label>
+
+      <select
+        className="w-full rounded-md border px-4 py-2 bg-transparent"
+        onChange={(e) => addGroesse(e.target.value as FlugzeugGroesse)}
+        defaultValue=""
+      >
+        <option value="" disabled>Größe auswählen</option>
+        {ALL_FLUGZEUGGROESSEN.map(g => (
+          <option key={g} value={g}>{g}</option>
+        ))}
+      </select>
+
+      {/* Tags */}
+      <div className="flex flex-wrap gap-2 mt-2">
+        {flugzeuggroessen.map(g => (
+          <span key={g} className="bg-primary/10 text-primary px-2 py-1 rounded flex items-center gap-1">
+            {g}
+            <button
+              type="button"
+              onClick={() => removeGroesse(g)}
+              className="text-red-500 font-bold"
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+      </div>
+    </div>
+
+  </div>
+            </div>
+
+          {/* Hangar Merkmale (reuse your checkbox UI) */}
+          <div>
+            <h3 className="font-semibold mb-2">Hangar Merkmale</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
     {/* Wetterschutz */}
     <div className="rounded-md border border-border dark:border-darkborder p-4">
@@ -690,111 +591,28 @@ const validateHangarMerkmale = (merkmale: HangarMerkmale): string | null => {
     </div>
 
   </div>
-            </div>
-{/* Sektion Service */}
-            <div className="mb-8">
-  <h3 className="text-base font-semibold mb-4 text-midnight_text dark:text-white">
-    Services am Standort
-  </h3>
+          </div>
 
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-    <ServiceCard
-      title="Einlagerungsservice"
-      enabled={formData.services.einlagerung.enabled}
-      price={formData.services.einlagerung.price}
-      unit={formData.services.einlagerung.unit}
-      unitOptions={["pro Tag", "pro Woche", "pro Monat"]}
-      onToggle={() => handleServiceToggle("einlagerung")}
-      onPriceChange={(v) => handleServicePrice("einlagerung", v)}
-      onUnitChange={(v) => handleServiceUnit("einlagerung", v)}
-      error={serviceErrors.einlagerung}
-    />
-
-    <ServiceCard
-      title="Flugbereitschaft herstellen"
-      enabled={formData.services.flugbereitschaft.enabled}
-      price={formData.services.flugbereitschaft.price}
-      unit={formData.services.flugbereitschaft.unit}
-      unitOptions={["pro Vorgang", "pauschal"]}
-      onToggle={() => handleServiceToggle("flugbereitschaft")}
-      onPriceChange={(v) => handleServicePrice("flugbereitschaft", v)}
-      onUnitChange={(v) => handleServiceUnit("flugbereitschaft", v)}
-      error={serviceErrors.flugbereit}
-    />
-
-    <ServiceCard
-      title="Tanken"
-      enabled={formData.services.tanken.enabled}
-      price={formData.services.tanken.price}
-      unit={formData.services.tanken.unit}
-      unitOptions={["pro Liter", "pauschal"]}
-      onToggle={() => handleServiceToggle("tanken")}
-      onPriceChange={(v) => handleServicePrice("tanken", v)}
-      onUnitChange={(v) => handleServiceUnit("tanken", v)}
-      error={serviceErrors.tanken}
-    />
-
-    <ServiceCard
-      title="Reinigung"
-      enabled={formData.services.reinigung.enabled}
-      price={formData.services.reinigung.price}
-      unit={formData.services.reinigung.unit}
-      unitOptions={["innen", "außen", "komplett"]}
-      onToggle={() => handleServiceToggle("reinigung")}
-      onPriceChange={(v) => handleServicePrice("reinigung", v)}
-      onUnitChange={(v) => handleServiceUnit("reinigung", v)}
-      error={serviceErrors.reinigung}
-    />
-
-  </div>
-</div>
-
-{/* Sektion Flugzeugtyp und Stellplätze */}
- <AircraftTypesAndSlots
-    value={{ flugzeugtypen, flugzeuggroessen }}
-    onChange={({ flugzeugtypen: ft, flugzeuggroessen: fg }) => {
-      setFlugzeugtypen(ft);
-      setFlugzeuggroessen(fg);
-    }}
-  />
-
-
-
-            <div className="mb-9">
-              <button
-                type="submit"
-                className="flex w-full cursor-pointer items-center justify-center rounded-md bg-primary hover:bg-DarkPrimary px-5 py-3 text-base text-white transition duration-300 ease-in-out hover:!bg-darkprimary dark:hover:!bg-darkprimary"
-              >
-                Sign Up {loading && <Loader />}
-              </button>
-            </div>
-          </form>
-
-          {/*<p className="text-midnight_text dark:text-white mb-4 text-base">
-            By creating an account you are agree with our{" "}
-            <a href="/#" className="text-midnight_text dark:text-white hover:text-primary dark:hover:text-primary">
-              Privacy
-            </a>{" "}
-            and{" "}
-            <a href="/#" className="text-midnight_text dark:text-white hover:text-primary dark:hover:text-primary">
-              Policy
-            </a>
-          </p>*/}
-
-          <p className="text-midnight_text dark:text-white text-base">
-            Already have an account?
-            <Link
-              href="/signin"
-              className="pl-2 text-midnight_text dark:text-white hover:text-primary dark:hover:text-primary"
+          {/* Buttons */}
+          <div className="flex justify-end gap-4 mt-6">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400"
             >
-              Sign In
-            </Link>
-          </p>
-        </div>
+              Abbrechen
+            </button>
+
+            <button
+              type="submit"
+              className="px-4 py-2 rounded bg-primary text-white hover:bg-DarkPrimary"
+            >
+              Änderung speichern {loading && "..."}
+            </button>
+          </div>
+
+        </form>
       </div>
     </div>
   );
-};
-
-export default SignUp;
+}

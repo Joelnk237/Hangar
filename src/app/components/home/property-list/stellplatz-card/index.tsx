@@ -56,7 +56,7 @@ const StellplatzCard: React.FC<PropertyCardProps> = ({ property, viewMode }) => 
 
           <div className="flex gap-2 flex-wrap justify-between">
             <p>
-                Services: {property.services}
+                Services: {property.services==null?"-":property.services.join(", ")}
             </p>
             
             <button

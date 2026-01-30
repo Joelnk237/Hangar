@@ -6,7 +6,7 @@ import { Eye, Edit, Trash2 } from "lucide-react";
 import { Flugzeug } from "@/app/types/property/flugzeug";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import toast, {Toaster} from "react-hot-toast";
+import toast from "react-hot-toast";
 
 
 interface PropertyCardProps {
@@ -24,6 +24,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, viewMode, onDelet
   
   const handleDelete = async (e: React.MouseEvent) => {
 e.preventDefault();
+e.stopPropagation()
 
     if (property.status) {
       toast.error("Dieses Flugzeug ist aktuell einem Stellplatz zugeordnet und kann nicht gelöscht werden.");
@@ -56,10 +57,12 @@ e.preventDefault();
       if (!res.ok) {
         throw new Error(text || "Löschen fehlgeschlagen");
       }
+      setLoading(false);
 
       toast.success("Flugzeug erfolgreich gelöscht");
       setShowModal(false);
       onDeleted?.(property.id);
+      window.location.reload();
 
     } catch (err: any) {
       toast.error(err.message || "Fehler beim Löschen");
@@ -112,7 +115,7 @@ const handleConsult = (e: React.MouseEvent) => {
           >
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
           </svg>*/}
-        </div> 
+        </div> </Link>
         <div className={`p-5 sm:p-8 dark:text-white text-opacity-50 ${viewMode=="list" && 'w-[70%] flex flex-col justify-center'}`}>
 
           <div className="flex flex-col gap-1 border-b border-border dark:border-dark_border mb-6">
@@ -164,7 +167,7 @@ const handleConsult = (e: React.MouseEvent) => {
            
           </div>
         </div>
-      </Link>
+      
 
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">

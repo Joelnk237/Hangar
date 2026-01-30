@@ -215,12 +215,12 @@ export default function AdvanceSearch({ initialLocation }: Props) {
                                         )
                                     ))}
 
-                                    {/* Example button */}
+                                    {/* Example button 
                                     <div>
                                         <button className='bg-primary hover:bg-blue-700 text-white w-full py-3 px-6 text-base rounded-lg'>
                                             Find Property
                                         </button>
-                                    </div>
+                                    </div>*/}
                                 </div>
                             </div>
                         </div>

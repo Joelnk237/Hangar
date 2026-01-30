@@ -307,7 +307,10 @@ const FlugzeugForm = ({ mode, initialData, onSuccess }: FlugzeugFormProps) => {
           />
         </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <button className="w-full bg-primary text-white py-3 rounded-md">Abbrechen</button>
+            <button className="w-full bg-primary text-white py-3 rounded-md"
+            onClick= {(e) => {e.preventDefault(); router.push("/flugzeuge")}}
+            >
+              Abbrechen</button>
             <button
               type="submit"
               className="w-full bg-primary text-white py-3 rounded-md"

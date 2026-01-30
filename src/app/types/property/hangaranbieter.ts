@@ -57,3 +57,8 @@ export type HangaranbieterInfosTyp = {
     ansprechpartner:string | null;
     hangar_merkmale:HangarMerkmale;
 };
+
+export type HangaranbieterSpezialisierungen = {
+  flugzeugtypen: string[];
+  flugzeuggroessen: string[];
+};

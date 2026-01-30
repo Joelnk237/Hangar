@@ -264,7 +264,7 @@ const handleDetailsInfosClick = async () => {
 
         {/* Besonderheiten */}
         <div>
-          <h4 className="font-semibold mb-6 text-midnight_text dark:mb-2">Besonderheiten</h4>{stellplatz.id}
+          <h4 className="font-semibold mb-6 text-midnight_text dark:mb-2">Besonderheiten</h4>
           <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
             {stellplatz.besonderheiten || "Keine Besonderheiten angegeben."}
           </p>

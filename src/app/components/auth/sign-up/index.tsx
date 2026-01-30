@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Loader from "../../shared/Loader";
 import Logo from "../../layout/header/logo";
+import toast from "react-hot-toast";
 const SignUp = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -97,9 +98,18 @@ const SignUp = () => {
     });
 
     if (!res.ok) {
-      const errData = await res.json();
-      throw new Error(errData.message || "Registration failed");
-    }
+  const errData = await res.json();
+
+  if (errData.error === "EMAIL_ALREADY_EXISTS") {
+    toast.error("Diese E-Mail wird bereits verwendet");
+    //throw new Error("Diese E-Mail wird bereits verwendet");
+    return;
+    
+  }
+
+  //throw new Error(errData.message || "Registration failed");
+}
+
 
     const data = await res.json();
       router.push("/");

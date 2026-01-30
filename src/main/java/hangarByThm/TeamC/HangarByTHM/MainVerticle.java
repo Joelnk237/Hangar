@@ -1,14 +1,12 @@
 package hangarByThm.TeamC.HangarByTHM;
 
-import io.vertx.core.Future;
-import io.vertx.core.MultiMap;
+import io.vertx.core.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-
-import io.vertx.core.VerticleBase;
-import io.vertx.core.Vertx;
+import io.vertx.core.Future;
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.json.JsonArray;
@@ -22,6 +20,7 @@ import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.JWTAuthHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.pgclient.PgException;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.PoolOptions;
@@ -146,10 +145,24 @@ public class MainVerticle extends VerticleBase {
       .handler(this::hangaranbieterContextHandler)
       .handler(this::getHangaranbieterDashboard);
 
+    //Update hangaranbieterInfos
+    router.put("/api/hangaranbieter/update")
+      .handler(jwtAuthHandler)
+      .handler(this::hangaranbieterContextHandler)
+      .handler(this::updateHangaranbieterHandler);
+
+
     router.get("/api/flugzeugbesitzer/me")
       .handler(jwtAuthHandler)
       .handler(this::flugzeugbesitzerContextHandler)
       .handler(this::getFBesitzerInfosHandler);
+
+    //Update Flugzeugbesitzer Infos
+    router.put("/api/flugzeugbesitzer/update")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::updateFlugzeugbesitzerHandler);
+
 
 
     router.post("/api/flugzeuge")
@@ -580,6 +593,16 @@ public class MainVerticle extends VerticleBase {
       )
       .onFailure(err -> {
         err.printStackTrace();
+        if ("EMAIL_ALREADY_EXISTS".equals(err.getMessage())) {
+          ctx.response()
+            .setStatusCode(409) // Conflict
+            .putHeader("Content-Type", "application/json")
+            .end(new JsonObject()
+              .put("error", "EMAIL_ALREADY_EXISTS")
+              .put("message", "Diese E-Mail ist bereits registriert")
+              .encode());
+          return;
+        }
         ctx.response()
           .setStatusCode(500)
           .end(err.getMessage());
@@ -604,7 +627,15 @@ public class MainVerticle extends VerticleBase {
         adresse.getString("plz"),
         adresse.getString("ort")
       ))
-      .map(rowSet -> rowSet.iterator().next().getUUID("id"));
+      .map(rowSet -> rowSet.iterator().next().getUUID("id"))
+      .recover(err -> {
+        if (err instanceof PgException pg) {
+          if ("23505".equals(pg.getSqlState())) {
+            return Future.failedFuture("EMAIL_ALREADY_EXISTS");
+          }
+        }
+        return Future.failedFuture(err);
+      });
   }
 
   private Future<Void> insertFlugzeugbesitzer(UUID benutzerId, JsonObject body) {
@@ -881,11 +912,11 @@ public class MainVerticle extends VerticleBase {
       .addString(req.getFormAttribute("flugzeugtyp"))
       .addString(req.getFormAttribute("flugzeuggroesse"))
       .addValue(abmasse.encode())
-      .addInteger(Integer.parseInt(req.getFormAttribute("flugstunden")))
-      .addInteger(Integer.parseInt(req.getFormAttribute("flugkilometer")))
-      .addInteger(Integer.parseInt(req.getFormAttribute("baujahr")))
-      .addBigDecimal(new BigDecimal(req.getFormAttribute("treibstoffverbrauch")))
-      .addInteger(Integer.parseInt(req.getFormAttribute("frachtkapazitaet")))
+      .addInteger(req.getFormAttribute("flugstunden")!=null?Integer.parseInt(req.getFormAttribute("flugstunden")):null)
+      .addInteger(req.getFormAttribute("flugkilometer")!=null?Integer.parseInt(req.getFormAttribute("flugkilometer")):null)
+      .addInteger(req.getFormAttribute("baujahr")==null?null:Integer.parseInt(req.getFormAttribute("baujahr")))
+      .addBigDecimal(req.getFormAttribute("treibstoffverbrauch")==null?null:new BigDecimal(req.getFormAttribute("treibstoffverbrauch")))
+      .addInteger(req.getFormAttribute("frachtkapazitaet")==null?null:Integer.parseInt(req.getFormAttribute("frachtkapazitaet")))
       .addUUID(flugzeugId)
       .addUUID(besitzerId);
 
@@ -997,7 +1028,7 @@ public class MainVerticle extends VerticleBase {
   private void deleteFlugzeugHandler(RoutingContext ctx) {
 
     UUID flugzeugId = UUID.fromString(ctx.pathParam("id"));
-    UUID flugzeugbesitzerId = UUID.fromString(ctx.get("flugzeugbesitzerId"));
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
 
     // ob das Flugzeug dem User gehört
     String sqlCheckOwner =
@@ -1636,10 +1667,12 @@ public class MainVerticle extends VerticleBase {
   }
 
   private JsonObject buildStellplatzSearchJson(io.vertx.sqlclient.Row row) {
-    String merkmaleStr = row.getString("hangar_merkmale");
+    /*String merkmaleStr = row.getString("hangar_merkmale");
     JsonObject merkmale = merkmaleStr != null
       ? new JsonObject(merkmaleStr)
-      : new JsonObject();
+      : new JsonObject();*/
+
+    JsonObject merkmale= row.getJsonObject("hangar_merkmale");
 
     String[] servicesArr = row.getArrayOfStrings("services");
     JsonArray services = new JsonArray();
@@ -4549,6 +4582,247 @@ WHERE h.id = $1;
         ctx.response().setStatusCode(500).end();
       });
   }
+
+
+  private void updateHangaranbieterHandler(RoutingContext ctx) {
+
+    UUID anbieterId = ctx.get("anbieterId");
+    JsonObject body = ctx.body().asJsonObject();
+
+    String firmenname = body.getString("firmenname");
+    String ansprechpartner = body.getString("ansprechpartner");
+    String email = body.getString("email");
+    String tel = body.getString("tel");
+    String strasse = body.getString("strasse");
+    String hausnummer = body.getString("hausnummer");
+    String plz = body.getString("plz");
+    String ort = body.getString("ort");
+
+    JsonObject hangarMerkmale = body.getJsonObject("hangarMerkmale");
+    JsonObject spezialisierungen = body.getJsonObject("spezialisierungen");
+
+    JsonArray flugzeugtypen = spezialisierungen.getJsonArray("flugzeugtypen", new JsonArray());
+    JsonArray flugzeuggroessen = spezialisierungen.getJsonArray("flugzeuggroessen", new JsonArray());
+
+      // ================= EMAIL UNIQUE CHECK =================
+      String emailCheckSql = """
+      SELECT id FROM benutzer
+      WHERE email = $1
+      AND id != (SELECT benutzer_id FROM hangaranbieter WHERE id = $2)
+    """;
+
+      client.preparedQuery(emailCheckSql)
+        .execute(Tuple.of(email, anbieterId))
+        .compose(rows -> {
+          if (rows.iterator().hasNext()) {
+            return Future.failedFuture("EMAIL_ALREADY_USED");
+          }
+          return Future.succeededFuture();
+        })
+
+        // ================= CHECK FLUGZEUGTYP CONFLICT =================
+        .compose(v -> {
+          String typCheckSql = """
+          SELECT DISTINCT flugzeugtyp
+          FROM stellplatz
+          WHERE hangaranbieter_id = $1
+          AND flugzeugtyp IS NOT NULL
+        """;
+
+          return client.preparedQuery(typCheckSql)
+            .execute(Tuple.of(anbieterId))
+            .compose(rows -> {
+              for (Row row : rows) {
+                String typ = row.getString("flugzeugtyp");
+                if (!flugzeugtypen.contains(typ)) {
+                  return Future.failedFuture("FLUGZEUGTYP_IN_USE:" + typ);
+                }
+              }
+              return Future.succeededFuture();
+            });
+        })
+
+        // ================= CHECK FLUGZEUGGROESSE CONFLICT =================
+        .compose(v -> {
+          String groesseCheckSql = """
+          SELECT DISTINCT flugzeuggroesse
+          FROM stellplatz
+          WHERE hangaranbieter_id = $1
+          AND flugzeuggroesse IS NOT NULL
+        """;
+
+          return client.preparedQuery(groesseCheckSql)
+            .execute(Tuple.of(anbieterId))
+            .compose(rows -> {
+              for (Row row : rows) {
+                String g = row.getString("flugzeuggroesse");
+                if (!flugzeuggroessen.contains(g)) {
+                  return Future.failedFuture("FLUGZEUGGROESSE_IN_USE:" + g);
+                }
+              }
+              return Future.succeededFuture();
+            });
+        })
+
+        // ================= UPDATE BENUTZER =================
+        .compose(v -> {
+          String updateUserSql = """
+          UPDATE benutzer SET email=$1, strasse=$2, hausnummer=$3, plz=$4, ort=$5
+          WHERE id = (SELECT benutzer_id FROM hangaranbieter WHERE id=$6)
+        """;
+          return client.preparedQuery(updateUserSql)
+            .execute(Tuple.of(email, strasse,hausnummer,plz,ort, anbieterId));
+        })
+
+        // ================= UPDATE HANGARANBIETER =================
+        .compose(v -> {
+          String updateHangarSql = """
+          UPDATE hangaranbieter
+          SET firmenname=$1, ansprechpartner=$2, telefon=$3, hangar_merkmale=$4
+          WHERE id=$5
+        """;
+          return client.preparedQuery(updateHangarSql)
+            .execute(Tuple.of(firmenname, ansprechpartner, tel, hangarMerkmale, anbieterId));
+        })
+
+        // ================= DELETE OLD TYPES =================
+        .compose(v -> client.preparedQuery(
+          "DELETE FROM hangaranbieter_flugzeugtypen WHERE hangaranbieter_id=$1"
+        ).execute(Tuple.of(anbieterId)))
+
+        // ================= INSERT NEW TYPES =================
+        .compose(v -> insertSequentially(flugzeugtypen, t ->
+          client.preparedQuery(
+            "INSERT INTO hangaranbieter_flugzeugtypen(hangaranbieter_id, flugzeugtyp) VALUES ($1, $2::flugzeugtyp_enum)"
+          ).execute(Tuple.of(anbieterId, t.toString())).mapEmpty()
+        ))
+
+        // ================= DELETE OLD SIZES =================
+        .compose(v -> client.preparedQuery(
+          "DELETE FROM hangaranbieter_flugzeuggroessen WHERE hangaranbieter_id=$1"
+        ).execute(Tuple.of(anbieterId)))
+
+        // ================= INSERT NEW SIZES =================
+        .compose(v -> insertSequentially(flugzeuggroessen, g ->
+          client.preparedQuery(
+            "INSERT INTO hangaranbieter_flugzeuggroessen(hangaranbieter_id, flugzeuggroesse) VALUES ($1, $2::flugzeuggroesse_enum)"
+          ).execute(Tuple.of(anbieterId, g.toString())).mapEmpty()
+        ))
+
+    .onSuccess(v -> {
+      ctx.response().setStatusCode(200).end("UPDATED");
+    }).onFailure(err -> {
+
+      String msg = err.getMessage();
+
+      if (msg.startsWith("EMAIL_ALREADY_USED")) {
+        ctx.response().setStatusCode(409).end("EMAIL_ALREADY_USED");
+        return;
+      }
+      if (msg.startsWith("FLUGZEUGTYP_IN_USE")) {
+        ctx.response().setStatusCode(400).end(msg);
+        return;
+      }
+      if (msg.startsWith("FLUGZEUGGROESSE_IN_USE")) {
+        ctx.response().setStatusCode(400).end(msg);
+        return;
+      }
+
+      err.printStackTrace();
+      ctx.response().setStatusCode(500).end("UPDATE_FAILED");
+    });
+  }
+
+  private void updateFlugzeugbesitzerHandler(RoutingContext ctx) {
+
+    UUID besitzerId = ctx.get("flugzeugbesitzerId");
+    JsonObject body = ctx.body().asJsonObject();
+
+    String name = body.getString("name");
+    String email = body.getString("email");
+    String tel = body.getString("tel");
+    String strasse = body.getString("strasse");
+    String hausnummer = body.getString("hausnummer");
+    String plz = body.getString("plz");
+    String ort = body.getString("ort");
+
+    // 1) CHECK EMAIL UNIQUE
+    String emailCheckSql = """
+    SELECT id FROM benutzer
+    WHERE email=$1
+    AND id != (SELECT benutzer_id FROM flugzeugbesitzer WHERE id=$2)
+  """;
+
+    client.preparedQuery(emailCheckSql)
+      .execute(Tuple.of(email, besitzerId))
+      .compose(rows -> {
+        if (rows.iterator().hasNext()) {
+          return Future.failedFuture("EMAIL_ALREADY_USED");
+        }
+        return Future.succeededFuture();
+      })
+
+      // 2) UPDATE BENUTZER
+      .compose(v -> {
+        String updateUserSql = """
+        UPDATE benutzer
+        SET name=$1, email=$2, strasse=$3, hausnummer=$4, plz=$5, ort=$6
+        WHERE id=(SELECT benutzer_id FROM flugzeugbesitzer WHERE id=$7)
+      """;
+
+        return client.preparedQuery(updateUserSql)
+          .execute(Tuple.of(name, email, strasse, hausnummer, plz, ort, besitzerId));
+      })
+
+      // 3) UPDATE FLUGZEUGBESITZER
+      .compose(v -> {
+        String updateBesitzerSql = """
+        UPDATE flugzeugbesitzer SET telefon=$1 WHERE id=$2
+      """;
+        return client.preparedQuery(updateBesitzerSql)
+          .execute(Tuple.of(tel, besitzerId));
+      })
+
+      // 4) RETURN UPDATED DATA
+      .compose(v -> {
+        String fetchSql = """
+        SELECT b.name, b.email, b.strasse, b.hausnummer, b.plz, b.ort, f.telefon
+        FROM benutzer b
+        JOIN flugzeugbesitzer f ON b.id=f.benutzer_id
+        WHERE f.id=$1
+      """;
+        return client.preparedQuery(fetchSql).execute(Tuple.of(besitzerId));
+      })
+
+      .onSuccess(rows -> {
+        Row row = rows.iterator().next();
+        JsonObject res = new JsonObject()
+          .put("name", row.getString("name"))
+          .put("email", row.getString("email"))
+          .put("strasse", row.getString("strasse"))
+          .put("hausnummer", row.getString("hausnummer"))
+          .put("plz", row.getString("plz"))
+          .put("ort", row.getString("ort"))
+          .put("tel", row.getString("telefon"));
+
+        ctx.response().putHeader("Content-Type", "application/json")
+          .end(res.encode());
+      })
+
+      .onFailure(err -> {
+        String msg = err.getMessage();
+
+        if ("EMAIL_ALREADY_USED".equals(msg)) {
+          ctx.response().setStatusCode(409).end("EMAIL_ALREADY_USED");
+          return;
+        }
+
+        err.printStackTrace();
+        ctx.response().setStatusCode(500).end("UPDATE_FAILED");
+      });
+  }
+
+
 
 
 

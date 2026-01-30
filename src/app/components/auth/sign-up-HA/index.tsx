@@ -7,6 +7,7 @@ import Loader from "../../shared/Loader";
 import Logo from "../../layout/header/logo";
 import ServiceCard from "../ServiceCard";
 import AircraftTypesAndSlots from "../AircraftTypesAndSlots";
+import { HangarMerkmale } from "@/app/types/property/hangaranbieter";
 const SignUp = () => {
   const router = useRouter();
 
@@ -23,34 +24,6 @@ type FlugzeugGroesseEintrag = {
 const [flugzeugtypen, setFlugzeugtypen] = useState<FlugzeugTypEintrag[]>([]);
 const [flugzeuggroessen, setFlugzeuggroessen] = useState<FlugzeugGroesseEintrag[]>([]);
 
-
-  type HangarMerkmale = {
-  wetterschutz: {
-    enabled: boolean;
-    voll: boolean;
-    teil: boolean;
-  };
-  flugfeld: {
-    enabled: boolean;
-    asphalt: boolean;
-    gras: boolean;
-  };
-  zugang24h: {
-    enabled: boolean;
-    code: boolean;
-    chip: boolean;
-  };
-  wachschutz: {
-    enabled: boolean;
-    alarm: boolean;
-    zutritt: boolean;
-  };
-  video: {
-    enabled: boolean;
-    live: boolean;
-    recording24h: boolean;
-  };
-};
 
 const initialHangarMerkmale: HangarMerkmale = {
   wetterschutz: {

@@ -19,17 +19,7 @@ export type propertyData = {
     name: string,
     slug: string
 };
-/*export type flugzeugData = {
-    id: string,
-    image: string,
-    flugzeugtyp: string,
-    flugzeuggroesse: string,
-    kennzeichen: string,
-    stellplatz: string,
-    rTermin: string,
-    von: string, 
-    bis: string
-}*/
+
 export type flugzeugData = {
     flugzeug:{
         id: string,

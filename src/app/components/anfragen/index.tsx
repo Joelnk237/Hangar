@@ -17,6 +17,11 @@ const Anfragen = ({ anfragen }: Props) => {
     const [showModal, setShowModal] = useState(false);
     const [selectedAnfrage, setSelectedAnfrage] = useState<Anfrage | null>(null);
 
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [detailsText, setDetailsText] = useState("");
+    const [detailsLoading, setDetailsLoading] = useState(false);
+
+
     const openModal = (anfrage: Anfrage) => {
     setSelectedAnfrage(anfrage);
     setShowModal(true);
@@ -25,6 +30,18 @@ const Anfragen = ({ anfragen }: Props) => {
     const closeModal = () => {
     setShowModal(false);
     setSelectedAnfrage(null);
+    };
+
+    const openDetailsModal = (anfrage: Anfrage) => {
+    setSelectedAnfrage(anfrage);
+    setDetailsText("");
+    setShowDetailsModal(true);
+    };
+
+    const closeDetailsModal = () => {
+    setShowDetailsModal(false);
+    setSelectedAnfrage(null);
+    setDetailsText("");
     };
 
     const handleDeleteAnfrage = async (id: number) => {
@@ -49,6 +66,7 @@ const Anfragen = ({ anfragen }: Props) => {
 
     if (!res.ok && res.status !== 204) {
       const text = await res.text();
+      toast.error("Löschen fehlgeschlagen");
       throw new Error(text || "Löschen fehlgeschlagen");
     }
 
@@ -66,6 +84,77 @@ const Anfragen = ({ anfragen }: Props) => {
     toast.error("Fehler beim Löschen der Anfrage");
   }
 };
+
+const handleSendDetailsinfos = async () => {
+  if (!selectedAnfrage || !detailsText.trim()) return;
+
+  try {
+    setDetailsLoading(true);
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(
+      `http://localhost:8888/api/anfragen/${selectedAnfrage.id}/detailsinfos`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          inhalt: detailsText,
+          hangaranbieter_id: selectedAnfrage.hangaranbieter.id,
+          flugzeugbesitzer_id: selectedAnfrage.flugzeugbesitzer.id,
+          stellplatz_id: selectedAnfrage.stellplatz.id,
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text);
+    }
+
+    toast.success("Detailsinfos erfolgreich gesendet");
+    closeDetailsModal();
+    window.location.reload();
+
+  } catch (err) {
+    console.error(err);
+    toast.error("Fehler beim Senden der Detailsinfos");
+  } finally {
+    setDetailsLoading(false);
+  }
+};
+
+const handleMarkAnswered = async (id: number) => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(
+      `http://localhost:8888/api/anfragen/${id}/answered`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!res.ok && res.status !== 204) {
+      const text = await res.text();
+      throw new Error(text);
+    }
+
+    toast.success("Anfrage als erledigt markiert");
+    window.location.reload();
+
+  } catch (err) {
+    console.error(err);
+    toast.error("Fehler beim Aktualisieren der Anfrage");
+  }
+};
+
+
 
 
 
@@ -128,9 +217,10 @@ const Anfragen = ({ anfragen }: Props) => {
                     <div className="grid grid-cols-3 gap-2">
                         {!a.answered && ( a.is_detailsinfos ? 
                             (<button className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
+                                onClick={() => openDetailsModal(a)}
                                 title="Detailsinfo erfassen"
                             >
-                                <Edit2 size={18} />{a.stellplatz.id}
+                                <Edit2 size={18} />
                             </button>)
                             :
                             (<><button className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
@@ -138,9 +228,11 @@ const Anfragen = ({ anfragen }: Props) => {
                                 title="ansehen">
                                 <Eye size={18}/>
                             </button>
-                            <button className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
+                            {!a.answered && <button 
+                            onClick={() => handleMarkAnswered(a.id)}
+                            className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
                                 title="als erledigt markieren"
-                            ><Check size={18}/></button></>))}
+                            ><Check size={18}/></button>}</>))}
                         <button className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition"
                         onClick={() => handleDeleteAnfrage(a.id)}
                         title="stornieren"
@@ -193,6 +285,43 @@ const Anfragen = ({ anfragen }: Props) => {
     </div>
   </div>
 )}
+
+{showDetailsModal && selectedAnfrage && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="bg-white dark:bg-semidark rounded-lg shadow-xl w-full max-w-xl p-6 space-y-4">
+
+      <h2 className="text-lg font-semibold">
+        Detailsinformationen zum Stellplatz
+      </h2>
+
+      <textarea
+        className="w-full min-h-[180px] border rounded p-3 resize-none"
+        placeholder="Geben Sie hier die Detailsinformationen ein…"
+        value={detailsText}
+        onChange={(e) => setDetailsText(e.target.value)}
+      />
+
+      <div className="flex justify-end gap-3 pt-4">
+        <button
+          onClick={closeDetailsModal}
+          className="px-4 py-2 border rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+        >
+          Abbrechen
+        </button>
+
+        <button
+          disabled={!detailsText.trim() || detailsLoading}
+          onClick={handleSendDetailsinfos}
+          className="px-4 py-2 bg-primary text-white rounded disabled:opacity-50"
+        >
+          Senden
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+
 
     
     

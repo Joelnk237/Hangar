@@ -10,8 +10,6 @@ import HomeHAnbieter from './components/home/actors/HomeHAnbieter';
 
 export default function Home() {
 
-  //let control;
-  //control=true;
   const router = useRouter();
 
   const [rolle, setRolle] = useState<string | null>(null);

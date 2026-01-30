@@ -17,7 +17,7 @@ const headerDataHAnbieter = [
     href: "#",
     submenu: [
       { label: "Angebotsanfragen", href: "/angebote/hangaranbieter" },
-      { label: "Anfragen", href: "/anfragen" },
+      { label: "Kundenanfragen", href: "/anfragen" },
       { label: "Reparatur-/Wartungsanfragen", href: "#" },
     ],
   },
@@ -31,7 +31,7 @@ const headerDataHAnbieter = [
   },
   
   { label: "Reservierungen", href: "/reservierungen" },
-  { label: "Profil", href: "/nachrichte" },
+  { label: "Profil", href: "/profil" },
 ];
 const headerDataFBesitzer = [
   { label: "Home", href: "/" },
@@ -40,7 +40,8 @@ const headerDataFBesitzer = [
   { label: "Anfragen", href: "#" },
   { label: "Angebote", href: "/angebote/flugzeugbesitzer" },
   { label: "Termine", href: "/termine" },
-  { label: "Nachrichten", href: "/nachrichten" }, 
+  { label: "Nachrichten", href: "/nachrichten" },
+  { label: "Profil", href: "/profil" },  
 ];
 
 export const GET = async () => {

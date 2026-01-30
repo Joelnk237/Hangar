@@ -116,6 +116,7 @@ public class MainVerticle extends VerticleBase {
       .allowedMethod(HttpMethod.DELETE)
       .allowedMethod(HttpMethod.PUT)
       .allowedMethod(HttpMethod.POST)
+      .allowedMethod(HttpMethod.PATCH)
       .allowedMethod(HttpMethod.OPTIONS)
       .allowedHeader("Content-Type")
       .allowedHeader("Authorization"));
@@ -145,16 +146,16 @@ public class MainVerticle extends VerticleBase {
       .handler(this::hangaranbieterContextHandler)
       .handler(this::getHangaranbieterDashboard);
 
+    router.get("/api/flugzeugbesitzer/me")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::getFBesitzerInfosHandler);
+
 
     router.post("/api/flugzeuge")
       .handler(jwtAuthHandler)  // JWT Handling
       .handler(this::createFlugzeugHandler);
 
-
-    /*router.put("/api/flugzeuge/:id")
-      .handler(jwtAuthHandler)  // JWT Handling
-      .handler(this::flugzeugbesitzerContextHandler)
-      .handler(this::modifyFlugzeugHandler);*/
 
     router.put("/api/flugzeuge/:id")
       .handler(jwtAuthHandler)
@@ -388,6 +389,30 @@ public class MainVerticle extends VerticleBase {
     router.delete("/api/anfragen/:id")
       .handler(jwtAuthHandler)
       .handler(this::deleteAnfrageHandler);
+
+    //Detailsinfos senden
+    router.post("/api/anfragen/:id/detailsinfos")
+      .handler(jwtAuthHandler)
+      .handler(this::sendDetailsinfosHandler);
+
+    //Anfrage Status aktualisieren
+    router.patch("/api/anfragen/:id/answered")
+      .handler(jwtAuthHandler)
+      .handler(this::markAnfrageAnsweredHandler);
+
+    //Nachrichten abrufen
+    router.get("/api/nachrichten/me")
+      .handler(jwtAuthHandler)
+      .handler(this::flugzeugbesitzerContextHandler)
+      .handler(this::getNachrichtenForFlugzeugbesitzer);
+
+    //Delete Nachricht
+    router.delete("/api/nachrichten/:id")
+      .handler(jwtAuthHandler)
+      .handler(this::deleteNachrichtHandler);
+
+
+
 
 
 
@@ -4227,7 +4252,7 @@ WHERE h.id = $1;
       });
   }
 
-
+// Anfrage Löschen
   private void deleteAnfrageHandler(RoutingContext ctx) {
 
     Integer anfrageId;
@@ -4263,6 +4288,265 @@ WHERE h.id = $1;
         ctx.response()
           .setStatusCode(500)
           .end("Serverfehler");
+      });
+  }
+
+  //Detaisinfos senden
+  private void sendDetailsinfosHandler(RoutingContext ctx) {
+
+    Integer anfrageId;
+    try {
+      anfrageId = Integer.parseInt(ctx.pathParam("id"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige Anfrage-ID");
+      return;
+    }
+
+    JsonObject body = ctx.body().asJsonObject();
+    String inhalt = body.getString("inhalt");
+    String hangaranbieterId = body.getString("hangaranbieter_id");
+    String flugzeugbesitzerId = body.getString("flugzeugbesitzer_id");
+    String stellplatzId = body.getString("stellplatz_id");
+
+    if (inhalt == null || inhalt.isBlank()) {
+      ctx.response().setStatusCode(400).end("Inhalt fehlt");
+      return;
+    }
+
+    String insertNachrichtSql = """
+    INSERT INTO nachricht (
+      hangaranbieter_id,
+      flugzeugbesitzer_id,
+      stellplatz_id,
+      inhalt,
+      is_detailsinfos
+    )
+    VALUES ($1, $2, $3, $4, true)
+  """;
+
+    String updateAnfrageSql = """
+    UPDATE anfrage
+    SET answered = true
+    WHERE id = $1
+  """;
+
+
+
+    client.preparedQuery(insertNachrichtSql)
+      .execute(Tuple.of(
+        UUID.fromString(hangaranbieterId),
+        UUID.fromString(flugzeugbesitzerId),
+        UUID.fromString(stellplatzId),
+        inhalt
+      ))
+      .compose(v ->
+        client.preparedQuery(updateAnfrageSql)
+          .execute(Tuple.of(anfrageId))
+      )
+      .onSuccess(v -> {
+        ctx.response().setStatusCode(201).end();
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response().setStatusCode(500).end("Serverfehler");
+      });
+
+  }
+
+  // ANfrage-status aktualisieren
+  private void markAnfrageAnsweredHandler(RoutingContext ctx) {
+
+    Integer anfrageId;
+    try {
+      anfrageId = Integer.parseInt(ctx.pathParam("id"));
+    } catch (Exception e) {
+      ctx.response().setStatusCode(400).end("Ungültige Anfrage-ID");
+      return;
+    }
+
+    String sql = """
+    UPDATE anfrage
+    SET answered = true
+    WHERE id = $1
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(anfrageId))
+      .onSuccess(res -> {
+        if (res.rowCount() == 0) {
+          ctx.response().setStatusCode(404).end("Anfrage nicht gefunden");
+        } else {
+          ctx.response().setStatusCode(204).end();
+        }
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response().setStatusCode(500).end("Serverfehler");
+      });
+  }
+
+  //Nachrichten laden
+  private void getNachrichtenForFlugzeugbesitzer(RoutingContext ctx) {
+
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+
+    String sql = """
+    SELECT
+      n.id,
+      n.inhalt,
+      n.is_detailsinfos,
+      n.created_at,
+
+      -- Stellplatz
+      s.id AS stellplatz_id,
+      s.kennzeichen AS stellplatz_kennzeichen,
+      s.standort AS stellplatz_standort,
+
+      -- Hangaranbieter
+      h.id AS hangar_id,
+      h.firmenname AS hangar_firmenname,
+
+      -- Flugzeugbesitzer Benutzer
+      fb.id AS fb_id,
+      b.name AS fb_name,
+      b.email AS fb_email
+
+    FROM nachricht n
+    JOIN hangaranbieter h ON n.hangaranbieter_id = h.id
+    JOIN flugzeugbesitzer fb ON n.flugzeugbesitzer_id = fb.id
+    JOIN benutzer b ON fb.benutzer_id = b.id
+    LEFT JOIN stellplatz s ON n.stellplatz_id = s.id
+
+    WHERE n.flugzeugbesitzer_id = $1
+    ORDER BY n.created_at DESC
+  """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(flugzeugbesitzerId))
+      .onSuccess(rows -> {
+        JsonArray result = new JsonArray();
+
+        for (Row row : rows) {
+          JsonObject stellplatz = null;
+          if (row.getUUID("stellplatz_id") != null) {
+            stellplatz = new JsonObject()
+              .put("id", row.getUUID("stellplatz_id").toString())
+              .put("kennzeichen", row.getString("stellplatz_kennzeichen"))
+              .put("standort", row.getString("stellplatz_standort"));
+          }
+
+          JsonObject nachricht = new JsonObject()
+            .put("id", row.getInteger("id"))
+            .put("inhalt", row.getString("inhalt"))
+            .put("is_detailsinfos", row.getBoolean("is_detailsinfos"))
+            .put("date", row.getOffsetDateTime("created_at").toString())
+            .put("stellplatz", stellplatz)
+            .put("hangaranbieter", new JsonObject()
+              .put("id", row.getUUID("hangar_id").toString())
+              .put("firmenname", row.getString("hangar_firmenname"))
+            )
+            .put("flugzeugbesitzer", new JsonObject()
+              .put("id", row.getUUID("fb_id").toString())
+              .put("name", row.getString("fb_name"))
+              .put("email", row.getString("fb_email"))
+            );
+
+          result.add(nachricht);
+        }
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(result.encode());
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response().setStatusCode(500).end("Serverfehler");
+      });
+  }
+
+  private void deleteNachrichtHandler(RoutingContext ctx){
+    String idParam = ctx.pathParam("id");
+
+    if (idParam == null) {
+      ctx.response().setStatusCode(400).end("Missing id");
+      return;
+    }
+
+    int nachrichtId;
+    try {
+      nachrichtId = Integer.parseInt(idParam);
+    } catch (IllegalArgumentException e) {
+      ctx.response().setStatusCode(400).end("Invalid UUID");
+      return;
+    }
+
+    String sql = "DELETE FROM nachricht WHERE id = $1";
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(nachrichtId))
+      .onSuccess(res -> {
+        ctx.response()
+          .setStatusCode(204) // No Content
+          .end();
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response()
+          .setStatusCode(500)
+          .end("DB error");
+      });
+  }
+
+
+  private void getFBesitzerInfosHandler(RoutingContext ctx){
+    UUID flugzeugbesitzerId = ctx.get("flugzeugbesitzerId");
+
+    String sql = """
+      SELECT
+        fb.id,
+        fb.benutzer_id,
+        b.name,
+        b.email,
+        fb.telefon AS tel,
+        b.strasse,
+        b.hausnummer,
+        b.plz,
+        b.ort
+      FROM flugzeugbesitzer fb
+      JOIN benutzer b ON fb.benutzer_id = b.id
+      WHERE fb.id = $1
+    """;
+
+    client.preparedQuery(sql)
+      .execute(Tuple.of(flugzeugbesitzerId))
+      .onSuccess(rows -> {
+
+        if (!rows.iterator().hasNext()) {
+          ctx.response().setStatusCode(404).end();
+          return;
+        }
+
+        Row row = rows.iterator().next();
+
+        JsonObject json = new JsonObject()
+          .put("id", row.getUUID("id").toString())
+          .put("benutzer_id", row.getUUID("benutzer_id").toString())
+          .put("name", row.getString("name"))
+          .put("email", row.getString("email"))
+          .put("tel", row.getString("tel"))
+          .put("strasse", row.getString("strasse"))
+          .put("hausnummer", row.getString("hausnummer"))
+          .put("plz", row.getString("plz"))
+          .put("ort", row.getString("ort"));
+
+        ctx.response()
+          .putHeader("Content-Type", "application/json")
+          .end(json.encode());
+
+      })
+      .onFailure(err -> {
+        err.printStackTrace();
+        ctx.response().setStatusCode(500).end();
       });
   }
 

@@ -187,6 +187,7 @@ export default function AdvanceSearch({ initialLocation }: Props) {
                                         
                                             {searchData?.locations?.map((option: any, index: any) => (
                                                 <input
+                                                key={index}
                                                 placeholder={option.placeholder}
                                                 type='text'
                                                 className='py-3 w-full pl-3 pr-9 border border-border dark:bg-semidark dark:border-dark_border dark:focus:border-primary  !rounded-lg focus-visible:outline-none focus:border-primary'

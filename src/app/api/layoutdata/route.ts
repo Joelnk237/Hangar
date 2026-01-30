@@ -8,7 +8,7 @@ const headerDataHAnbieter = [
     href: "#",
     submenu: [
       { label: "Stellplätze verwalten", href: "/stellplaetze/stellplaetzeDashboard" },
-      { label: "Zum Flugzeuge verwalten", href: "/stellplaetze/flugzeuge" },
+      { label: "Kundenflugzeuge verwalten", href: "/stellplaetze/flugzeuge" },
     ],
   },
   { label: "Services", href: "/services " },

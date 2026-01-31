@@ -1672,7 +1672,17 @@ public class MainVerticle extends VerticleBase {
       ? new JsonObject(merkmaleStr)
       : new JsonObject();*/
 
-    JsonObject merkmale= row.getJsonObject("hangar_merkmale");
+    //JsonObject merkmale= row.getJsonObject("hangar_merkmale");
+
+    Object merkmaleObj = row.getValue("hangar_merkmale");
+    JsonObject merkmale;
+    if (merkmaleObj == null) {
+      merkmale = new JsonObject();
+    }else{
+      merkmale = (merkmaleObj instanceof JsonObject)
+        ? (JsonObject) merkmaleObj
+        : new JsonObject(merkmaleObj.toString());
+    }
 
     String[] servicesArr = row.getArrayOfStrings("services");
     JsonArray services = new JsonArray();
@@ -1784,9 +1794,14 @@ public class MainVerticle extends VerticleBase {
     Object merkmaleObj = row.getValue("hangar_merkmale");
     Object servicesObj = row.getValue("services");
 
-    JsonObject merkmale = (merkmaleObj instanceof JsonObject)
-      ? (JsonObject) merkmaleObj
-      : new JsonObject(merkmaleObj.toString());
+    JsonObject merkmale;
+    if (merkmaleObj == null) {
+      merkmale = new JsonObject();
+    }else{
+      merkmale = (merkmaleObj instanceof JsonObject)
+        ? (JsonObject) merkmaleObj
+        : new JsonObject(merkmaleObj.toString());
+    }
 
     JsonObject services = (servicesObj instanceof JsonObject)
       ? (JsonObject) servicesObj

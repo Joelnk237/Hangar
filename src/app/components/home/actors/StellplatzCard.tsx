@@ -134,7 +134,7 @@ const handleDeleteStellplatz = async () => {
           </p>
             <svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#2F73F2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-lock-keyhole-open-icon lucide-lock-keyhole-open absolute top-[10px] right-[10px] bg-white p-2 rounded-lg"><circle cx="12" cy="16" r="1"/><rect width="18" height="12" x="3" y="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 9.33-2.5"/></svg>
 
-        </div>
+        </div></Link>
         <div className={`p-5 sm:p-8 dark:text-white text-opacity-50 ${viewMode=="list" && 'w-[70%] flex flex-col justify-center'}`}>
 
           <div className="flex flex-col gap-1 border-b border-border dark:border-dark_border mb-6">
@@ -203,7 +203,7 @@ const handleDeleteStellplatz = async () => {
       )}
           </div>
         </div>
-      </Link>
+      
     </div>
 
     {showDeleteModal && (

@@ -1,0 +1,124 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────
+# Réseau interne partagé par tous les services
+# ─────────────────────────────────────────────────────────────
+networks:
+  app-network:
+    driver: bridge
+
+# ─────────────────────────────────────────────────────────────
+# Volumes persistants
+# ─────────────────────────────────────────────────────────────
+volumes:
+  postgres-data:
+  jenkins-data:
+  sonarqube-data:
+  sonarqube-logs:
+  sonarqube-extensions:
+
+# ─────────────────────────────────────────────────────────────
+# Services
+# ─────────────────────────────────────────────────────────────
+services:
+
+  # ── Base de données PostgreSQL ───────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-appdb}
+      POSTGRES_USER:     ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appuser}"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  # ── Backend Vert.x 5 ────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend
+    restart: unless-stopped
+    environment:
+      DB_HOST:     postgres
+      DB_PORT:     5432
+      DB_NAME:     ${POSTGRES_DB:-appdb}
+      DB_USER:     ${POSTGRES_USER:-appuser}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "8080:8080"
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Frontend Next.js ─────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    container_name: frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+  # ── Jenkins CI/CD ────────────────────────────────────────
+  jenkins:
+    build:
+      context: ./jenkins
+      dockerfile: Dockerfile
+    container_name: jenkins
+    restart: unless-stopped
+    ports:
+      - "8090:8080"   # Interface Jenkins
+      - "50000:50000" # Agents Jenkins
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock  # Accès Docker depuis Jenkins
+    networks:
+      - app-network
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+
+  # ── SonarQube (analyse qualité code) ─────────────────────
+  sonarqube:
+    image: sonarqube:10-community
+    container_name: sonarqube
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_URL:      jdbc:postgresql://postgres:5432/${POSTGRES_DB:-appdb}
+      SONAR_JDBC_USERNAME: ${POSTGRES_USER:-appuser}
+      SONAR_JDBC_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - sonarqube-data:       /opt/sonarqube/data
+      - sonarqube-logs:       /opt/sonarqube/logs
+      - sonarqube-extensions: /opt/sonarqube/extensions
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # SonarQube nécessite vm.max_map_count=262144 sur l'hôte Linux :
+    # sudo sysctl -w vm.max_map_count=262144
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536

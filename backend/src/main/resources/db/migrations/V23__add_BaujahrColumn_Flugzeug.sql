@@ -1,0 +1,2 @@
+ALTER TABLE flugzeug
+  ADD COLUMN baujahr INTEGER;

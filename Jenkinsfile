@@ -198,7 +198,7 @@ pipeline {
         }
         always {
             // Nettoyage des images dangling pour libérer l'espace disque
-            node {
+            script {
                 sh 'docker image prune -f'
             }
         }

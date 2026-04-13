@@ -11,7 +11,7 @@ pipeline {
     // ── Variables globales ──────────────────────────────────
     environment {
         // Récupérées depuis Jenkins > Manage Jenkins > Credentials
-        SONAR_TOKEN    = credentials('sonar-token')
+        SONAR_TOKEN    = credentials('SonarQube')
         DOCKER_HUB_ID  = credentials('dockerhub-credentials')
 
         IMAGE_FRONTEND = "tonusername/mon-projet-frontend"
@@ -198,7 +198,9 @@ pipeline {
         }
         always {
             // Nettoyage des images dangling pour libérer l'espace disque
-            sh 'docker image prune -f'
+            node {
+                sh 'docker image prune -f'
+            }
         }
     }
 }

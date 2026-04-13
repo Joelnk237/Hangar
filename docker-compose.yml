@@ -98,7 +98,7 @@ services:
 
   # ── SonarQube (analyse qualité code) ─────────────────────
   sonarqube:
-    image: sonarqube:10-community
+    image: sonarqube:latest
     container_name: sonarqube
     restart: unless-stopped
     ports:
@@ -108,9 +108,9 @@ services:
       SONAR_JDBC_USERNAME: ${POSTGRES_USER:-appuser}
       SONAR_JDBC_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
-      - sonarqube-data:       /opt/sonarqube/data
-      - sonarqube-logs:       /opt/sonarqube/logs
-      - sonarqube-extensions: /opt/sonarqube/extensions
+      - sonarqube-data:/opt/sonarqube/data
+      - sonarqube-logs:/opt/sonarqube/logs
+      - sonarqube-extensions:/opt/sonarqube/extensions
     networks:
       - app-network
     depends_on:

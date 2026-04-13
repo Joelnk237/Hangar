@@ -1,6 +1,6 @@
 # Jenkins avec Docker CLI intégré
 # Permet à Jenkins de builder des images Docker directement
-FROM jenkins/jenkins:2.452-lts-jdk21
+FROM jenkins/jenkins:lts
 
 USER root
 

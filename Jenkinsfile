@@ -21,8 +21,8 @@ pipeline {
 
     // ── Options globales ────────────────────────────────────
     options {
-        timestamps()                          // Horodatage dans les logs
-        timeout(time: 30, unit: 'MINUTES')    // Abandon si > 30 min
+        // timestamps()                          // Horodatage dans les logs
+        // timeout(time: 30, unit: 'MINUTES')    // Abandon si > 30 min
         disableConcurrentBuilds()             // Un seul build à la fois
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }

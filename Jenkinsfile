@@ -11,7 +11,7 @@ pipeline {
     // ── Variables globales ──────────────────────────────────
     environment {
         // Récupérées depuis Jenkins > Manage Jenkins > Credentials
-        SONAR_TOKEN    = credentials('SonarQube')
+        SONAR_TOKEN    = credentials('sonarqube')
         DOCKER_HUB_ID  = credentials('dockerhub-credentials')
 
         IMAGE_FRONTEND = "localhost:5000/frontend"
@@ -187,6 +187,6 @@ pipeline {
         failure {
             echo "Pipeline échoué — consulte les logs ci-dessus"
         }
-        
+
     }
 }

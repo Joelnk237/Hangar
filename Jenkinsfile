@@ -187,9 +187,6 @@ pipeline {
         failure {
             echo "Pipeline échoué — consulte les logs ci-dessus"
         }
-        always {
-            // Nettoyage des images dangling pour libérer l'espace disque
-            // sh 'docker image prune -f'
-        }
+        
     }
 }

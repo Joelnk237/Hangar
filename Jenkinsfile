@@ -14,8 +14,8 @@ pipeline {
         SONAR_TOKEN    = credentials('SonarQube')
         DOCKER_HUB_ID  = credentials('dockerhub-credentials')
 
-        IMAGE_FRONTEND = "tonusername/mon-projet-frontend"
-        IMAGE_BACKEND  = "tonusername/mon-projet-backend"
+        IMAGE_FRONTEND = "localhost:5000/frontend"
+        IMAGE_BACKEND  = "localhost:5000/backend"
         IMAGE_TAG      = "${env.BUILD_NUMBER}"  // tag = numéro de build
     }
 
@@ -151,21 +151,12 @@ pipeline {
             }
             steps {
                 echo "Push des images vers le registry..."
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh """
-                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-
-                        docker push ${IMAGE_FRONTEND}:${IMAGE_TAG}
-                        docker push ${IMAGE_FRONTEND}:latest
-
-                        docker push ${IMAGE_BACKEND}:${IMAGE_TAG}
-                        docker push ${IMAGE_BACKEND}:latest
-                    """
-                }
+                sh """
+                    docker push ${IMAGE_FRONTEND}:${IMAGE_TAG}
+                    docker push ${IMAGE_FRONTEND}:latest
+                    docker push ${IMAGE_BACKEND}:${IMAGE_TAG}
+                    docker push ${IMAGE_BACKEND}:latest
+                """
             }
         }
 
@@ -198,9 +189,7 @@ pipeline {
         }
         always {
             // Nettoyage des images dangling pour libérer l'espace disque
-            script {
-                sh 'docker image prune -f'
-            }
+            // sh 'docker image prune -f'
         }
     }
 }

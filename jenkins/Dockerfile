@@ -6,6 +6,9 @@ USER root
 
 # Installer Docker CLI (pour builder les images depuis les pipelines)
 RUN apt-get update && apt-get install -y \
+    maven \
+    nodejs \
+    npm \
     apt-transport-https \
     ca-certificates \
     curl \

@@ -91,12 +91,12 @@ pipeline {
                 echo "Analyse qualité du code..."
                 // Le bloc withSonarQubeEnv utilise la config Jenkins
                 // (Manage Jenkins > Configure System > SonarQube servers)
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv('sonarqube') {
                     dir('backend') {
                         sh '''
                             mvn sonar:sonar \
-                                -Dsonar.projectKey=mon-projet-backend \
-                                -Dsonar.projectName="Mon Projet - Backend" \
+                                -Dsonar.projectKey=backend \
+                                -Dsonar.projectName="Backend" \
                                 -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
                                 -B
                         '''
@@ -104,8 +104,8 @@ pipeline {
                     dir('frontend') {
                         sh '''
                             npx sonar-scanner \
-                                -Dsonar.projectKey=mon-projet-frontend \
-                                -Dsonar.projectName="Mon Projet - Frontend" \
+                                -Dsonar.projectKey=frontend \
+                                -Dsonar.projectName="Frontend" \
                                 -Dsonar.sources=src \
                                 -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
                         '''

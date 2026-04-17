@@ -95,8 +95,8 @@ pipeline {
                     dir('backend') {
                         sh '''
                             mvn sonar:sonar \
-                                -Dsonar.projectKey=backend \
-                                -Dsonar.projectName="Backend" \
+                                -Dsonar.projectKey=hangarbythm \
+                                -Dsonar.projectName="hangarbythm" \
                                 -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
                                 -B
                         '''
@@ -104,8 +104,8 @@ pipeline {
                     dir('frontend') {
                         sh '''
                             npx sonar-scanner \
-                                -Dsonar.projectKey=frontend \
-                                -Dsonar.projectName="Frontend" \
+                                -Dsonar.projectKey=hangarbythm \
+                                -Dsonar.projectName="hangarbythm" \
                                 -Dsonar.sources=src \
                                 -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
                         '''

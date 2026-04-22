@@ -55,7 +55,7 @@ services:
       DB_USER:     ${POSTGRES_USER:-appuser}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     ports:
-      - "8080:8080"
+      - "8888:8888"
     networks:
       - app-network
     depends_on:

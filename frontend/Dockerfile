@@ -17,7 +17,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Variables d'environnement injectées au build (pas de secrets ici)
-ARG NEXT_PUBLIC_API_URL=http://backend:8080
+ARG NEXT_PUBLIC_API_URL=http://backend:8888
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 RUN npm run build

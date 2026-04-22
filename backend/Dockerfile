@@ -27,7 +27,7 @@ RUN addgroup --system --gid 1001 vertx \
 COPY --from=builder /app/target/*-fat.jar app.jar
 
 USER vertx
-EXPOSE 8080
+EXPOSE 8888
 
 # Options JVM recommandées pour conteneur
 CMD ["java", \

@@ -12,10 +12,10 @@ pipeline {
     environment {
         // Récupérées depuis Jenkins > Manage Jenkins > Credentials
         SONAR_TOKEN    = credentials('sonarqube')
-        // DOCKER_HUB_ID  = credentials('dockerhub-credentials')
+        DOCKER_HUB  = credentials('dockerhub-credentials')
 
-        IMAGE_FRONTEND = "localhost:5000/frontend"
-        IMAGE_BACKEND  = "localhost:5000/backend"
+        IMAGE_FRONTEND = "Joelnk237/hangarbythm_frontend"
+        IMAGE_BACKEND  = "Joelnk237/hangarbythm_backend"
         IMAGE_TAG      = "${env.BUILD_NUMBER}"  // tag = numéro de build
     }
 
@@ -152,6 +152,7 @@ pipeline {
             steps {
                 echo "Push des images vers le registry..."
                 sh """
+                    echo $DOCKER_HUB_PSW | docker login -u $DOCKER_HUB_USR --password-stdin
                     docker push ${IMAGE_FRONTEND}:${IMAGE_TAG}
                     docker push ${IMAGE_FRONTEND}:latest
                     docker push ${IMAGE_BACKEND}:${IMAGE_TAG}

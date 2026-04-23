@@ -1,0 +1,321 @@
+name: CI/CD Pipeline
+
+# ─────────────────────────────────────────────────────────────
+# Déclencheurs
+# - push sur main      → pipeline complet (tests + sonar + docker + deploy)
+# - pull_request       → tests + sonar uniquement (pas de deploy)
+# ─────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# ─────────────────────────────────────────────────────────────
+# Variables globales réutilisées dans tous les jobs
+# ─────────────────────────────────────────────────────────────
+env:
+  DOCKER_FRONTEND: joelnk237/hangarbythm_frontend
+  DOCKER_BACKEND:  joelnk237/hangarbythm_backend
+  JAVA_VERSION:    "21"
+  NODE_VERSION:    "20"
+
+jobs:
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 1 — TESTS BACKEND
+  # Maven clean verify = compile + test + jacoco coverage
+  # ═══════════════════════════════════════════════════════════
+  backend-tests:
+    name: "Backend — Tests & Coverage"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven             # cache ~/.m2 entre les runs → 2x plus rapide
+
+      - name: Run tests
+        run: |
+          cd backend
+          mvn clean verify -B
+        # clean verify = compile + test + jacoco report en une seule commande
+
+      - name: Upload JUnit results
+        if: always()               # upload même si les tests échouent
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-junit-results
+          path: backend/target/surefire-reports/*.xml
+          retention-days: 7
+
+      - name: Upload JaCoCo coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jacoco-report
+          path: backend/target/site/jacoco/jacoco.xml
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 2 — TESTS FRONTEND
+  # npm ci + jest --coverage
+  # ═══════════════════════════════════════════════════════════
+  frontend-tests:
+    name: "Frontend — Tests & Coverage"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run tests
+        run: |
+          cd frontend
+          npm test -- --coverage --watchAll=false --passWithNoTests
+        # --passWithNoTests évite l'échec si aucun test n'est encore écrit
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-lcov-report
+          path: frontend/coverage/lcov.info
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 3 — ANALYSE SONARCLOUD
+  # Attend que les deux jobs de tests réussissent
+  # Récupère les rapports de couverture uploadés
+  # ═══════════════════════════════════════════════════════════
+  sonarcloud:
+    name: "SonarCloud — Analyse qualité"
+    runs-on: ubuntu-latest
+    needs: [ backend-tests, frontend-tests ]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0           # obligatoire — SonarCloud analyse tout l'historique git
+          # pour distinguer nouveaux problèmes vs existants
+
+      - name: Setup Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Download JaCoCo report
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jacoco-report
+          path: backend/target/site/jacoco/
+
+      - name: Download frontend coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-lcov-report
+          path: frontend/coverage/
+
+      - name: SonarCloud scan — Backend
+        run: |
+          cd backend
+          mvn sonar:sonar \
+            -Dsonar.projectKey=hangarbythm_backend \
+            -Dsonar.projectName="HangarByThm - Backend" \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+            -B
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install frontend deps
+        run: |
+          cd frontend
+          npm ci
+
+      - name: SonarCloud scan — Frontend
+        run: |
+          cd frontend
+          npx sonar-scanner \
+            -Dsonar.projectKey=hangarbythm_frontend \
+            -Dsonar.projectName="HangarByThm - Frontend" \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.sources=src \
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 4 — BUILD & PUSH DOCKER HUB
+  # Seulement sur push main (pas sur les pull requests)
+  # Attend que sonarcloud réussisse
+  # ═══════════════════════════════════════════════════════════
+  docker-build-push:
+    name: "Docker — Build & Push"
+    runs-on: ubuntu-latest
+    needs: sonarcloud
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.DOCKER_FRONTEND }}:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_FRONTEND }}:latest
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.DOCKER_BACKEND }}:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_BACKEND }}:latest
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### Images publiées sur Docker Hub" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | Tags |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ env.DOCKER_FRONTEND }}\` | \`${{ env.IMAGE_TAG }}\` · \`latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ env.DOCKER_BACKEND }}\`  | \`${{ env.IMAGE_TAG }}\` · \`latest\` |" >> $GITHUB_STEP_SUMMARY
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 5 — DEPLOY SUR AWS EC2
+  # SSH → docker compose pull → up --force-recreate → health check
+  # ═══════════════════════════════════════════════════════════
+  deploy:
+    name: "Deploy — AWS EC2"
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    environment:
+      name: production
+      url: http://${{ secrets.EC2_HOST }}
+
+    steps:
+      - name: Deploy on EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key:      ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "═══════════════════════════════════"
+            echo "Déploiement — $(date)"
+            echo "Tag image : ${{ github.run_number }}"
+            echo "Commit    : ${{ github.sha }}"
+            echo "═══════════════════════════════════"
+
+            cd ~/hangarbythm
+
+            # 1. Pull les nouvelles images depuis Docker Hub
+            echo "Pull des nouvelles images..."
+            docker compose -f docker-compose.prod.yml pull frontend backend
+
+            # 2. Redémarrer frontend et backend sans toucher postgres
+            echo "Redémarrage des services..."
+            docker compose -f docker-compose.prod.yml up -d \
+              --no-deps \
+              --force-recreate \
+              frontend backend
+
+            # 3. Attendre le démarrage
+            echo "Attente du démarrage (30s)..."
+            sleep 30
+
+            # 4. Afficher l'état des conteneurs
+            docker compose -f docker-compose.prod.yml ps
+
+            # 5. Supprimer les anciennes images pour libérer l'espace disque
+            docker image prune -f
+
+            echo "Déploiement terminé"
+
+      - name: Health check
+        run: |
+          echo "Vérification HTTP de l'application..."
+          sleep 15
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 15 \
+            http://${{ secrets.EC2_HOST }})
+
+          echo "Réponse HTTP : $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "301" ] || [ "$HTTP_STATUS" = "302" ]; then
+            echo "Application en ligne"
+          else
+            echo "Échec — HTTP $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          ICON=$([[ "$STATUS" == "success" ]] && echo "✅" || echo "❌")
+          echo "### ${ICON} Déploiement ${STATUS}" >> $GITHUB_STEP_SUMMARY
+          echo "| Champ | Valeur |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag image | \`${{ github.run_number }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Serveur | \`${{ secrets.EC2_HOST }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Date | $(date) |" >> $GITHUB_STEP_SUMMARY

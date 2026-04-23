@@ -16,32 +16,87 @@ volumes:
   sonarqube-logs:
   sonarqube-extensions:
   registry-data:
+  pgadmin-data:
 
 # ─────────────────────────────────────────────────────────────
 # Services
 # ─────────────────────────────────────────────────────────────
 services:
 
-  # ── Base de données PostgreSQL ───────────────────────────
+  # ── 1. Base de données PostgreSQL ───────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB:       ${POSTGRES_DB:-appdb}
-      POSTGRES_USER:     ${POSTGRES_USER:-appuser}
+      POSTGRES_DB: ${POSTGRES_DB:-hangarbythm}
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"     # exposé en local pour pouvoir inspecter avec DBeaver/pgAdmin
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appuser}"]
-      interval: 10s
-      timeout:  5s
-      retries:  5
+      # Postgres est "prêt" seulement quand il accepte des connexions
+      # Flyway et le backend attendent ce healthcheck avant de démarrer
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appuser} -d ${POSTGRES_DB:-hangarbythm}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s   # laisse postgres initialiser avant le premier check
 
-  # ── Backend Vert.x 5 ────────────────────────────────────
+
+    # ── pgAdmin — interface graphique PostgreSQL ──────────────
+    # Accessible sur http://localhost:5050
+    # Login : admin@admin.com / root  (ou les valeurs de ton .env)
+    pgadmin:
+      image: dpage/pgadmin4:latest
+      container_name: pgadmin4_container
+      restart: unless-stopped
+      environment:
+        PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+        PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-root}
+        PGADMIN_CONFIG_SERVER_MODE: "False"   # mode desktop — pas de login à chaque fois
+      ports:
+        - "5050:80"
+      volumes:
+        - pgadmin-data:/var/lib/pgadmin
+        - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      networks:
+        - app-network
+      depends_on:
+        postgres:
+          condition: service_healthy
+
+  # ── 2. Flyway — migrations SQL ───────────────────────────────
+  # Ce service s'exécute UNE SEULE FOIS puis s'arrête (c'est normal)
+  # Il applique tous tes fichiers V1__init.sql, V2__... dans l'ordre
+  # Docker Compose le relance si postgres n'était pas encore prêt
+  flyway:
+    image: flyway/flyway:10-alpine
+    container_name: flyway
+    # restart: no est intentionnel — un service de migration ne doit
+    # pas tourner en continu, il fait son travail et s'arrête
+    restart: no
+    command: >
+      -url=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-hangarbythm}
+      -user=${POSTGRES_USER:-appuser}
+      -password=${POSTGRES_PASSWORD:-changeme}
+      -connectRetries=10
+      migrate
+    volumes:
+      # Monte tes scripts SQL directement depuis ton projet
+      # Flyway lit tous les fichiers V__*.sql dans ce dossier
+      - ./backend/src/main/resources/db/migration:/flyway/sql:ro
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy   # attend que postgres soit vraiment prêt
+
+  # ── 3. Backend Vert.x 5 ─────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -49,20 +104,31 @@ services:
     container_name: backend
     restart: unless-stopped
     environment:
+      # Variables lues par ton application Vert.x
+      # Adapte les noms selon ce que tu utilises dans ton code
       DB_HOST:     postgres
       DB_PORT:     5432
-      DB_NAME:     ${POSTGRES_DB:-appdb}
+      DB_NAME:     ${POSTGRES_DB:-hangarbythm}
       DB_USER:     ${POSTGRES_USER:-appuser}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      DB_URL:      jdbc:postgresql://postgres:5432/${POSTGRES_DB:-hangarbythm}
     ports:
-      - "8888:8888"
+      - "8080:8080"
     networks:
       - app-network
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_healthy   # postgres doit être prêt
+      flyway:
+        condition: service_completed_successfully  # migrations doivent être appliquées
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s   # laisse le JVM démarrer
 
-  # ── Frontend Next.js ─────────────────────────────────────
+  # ── 4. Frontend Next.js ──────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -76,7 +142,8 @@ services:
     networks:
       - app-network
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy   # backend doit répondre avant de démarrer
 
   # ── Jenkins CI/CD ────────────────────────────────────────
   jenkins:

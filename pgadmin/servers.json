@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name":           "Hangarbythm (local)",
+      "Group":          "Docker",
+      "Host":           "postgres",
+      "Port":           5432,
+      "MaintenanceDB":  "hangarbythm",
+      "Username":       "appuser",
+      "SSLMode":        "prefer",
+      "PassFile":       "/pgpassfile"
+    }
+  }
+}

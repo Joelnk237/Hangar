@@ -148,8 +148,8 @@ jobs:
         run: |
           cd backend
           mvn sonar:sonar \
-            -Dsonar.projectKey=hangarbythm_backend \
-            -Dsonar.projectName="HangarByThm - Backend" \
+            -Dsonar.projectKey=Hangar \
+            -Dsonar.projectName="Hangar" \
             -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
@@ -167,8 +167,8 @@ jobs:
         run: |
           cd frontend
           npx sonar-scanner \
-            -Dsonar.projectKey=hangarbythm_frontend \
-            -Dsonar.projectName="HangarByThm - Frontend" \
+            -Dsonar.projectKey=Hangar \
+            -Dsonar.projectName="Hangar" \
             -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.sources=src \
@@ -265,25 +265,17 @@ jobs:
 
             cd ~/hangarbythm
 
-            # 1. Pull les nouvelles images depuis Docker Hub
-            echo "Pull des nouvelles images..."
-            docker compose -f docker-compose.prod.yml pull frontend backend
+            docker compose -f docker-compose.prod.yml pull
 
-            # 2. Redémarrer frontend et backend sans toucher postgres
-            echo "Redémarrage des services..."
+            docker compose -f docker-compose.prod.yml up -d postgres
+
+            docker compose -f docker-compose.prod.yml run --rm flyway
+
             docker compose -f docker-compose.prod.yml up -d \
               --no-deps \
               --force-recreate \
-              frontend backend
+              backend frontend
 
-            # 3. Attendre le démarrage
-            echo "Attente du démarrage (30s)..."
-            sleep 30
-
-            # 4. Afficher l'état des conteneurs
-            docker compose -f docker-compose.prod.yml ps
-
-            # 5. Supprimer les anciennes images pour libérer l'espace disque
             docker image prune -f
 
             echo "Déploiement terminé"

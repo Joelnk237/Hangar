@@ -1,0 +1,59 @@
+
+networks:
+  app-network:
+
+volumes:
+  postgres-data:
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      retries: 10
+
+  flyway:
+    image: flyway/flyway:10-alpine
+    command: >
+      -url=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      -user=${POSTGRES_USER}
+      -password=${POSTGRES_PASSWORD}
+      migrate
+    volumes:
+      - ./backend/src/main/resources/db/migrations:/flyway/sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  backend:
+    image: joelnk237/hangarbythm_backend:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  frontend:
+    image: joelnk237/hangarbythm_frontend:latest
+    restart: unless-stopped
+    ports:
+      - "80:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - app-network

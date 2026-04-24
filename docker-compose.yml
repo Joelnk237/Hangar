@@ -89,7 +89,7 @@ services:
     volumes:
       # Monte tes scripts SQL directement depuis ton projet
       # Flyway lit tous les fichiers V__*.sql dans ce dossier
-      - ./backend/src/main/resources/db/migration:/flyway/sql:ro
+      - ./backend/src/main/resources/db/migrations:/flyway/sql:ro
     networks:
       - app-network
     depends_on:

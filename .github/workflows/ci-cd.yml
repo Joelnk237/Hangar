@@ -246,7 +246,6 @@ jobs:
 
     environment:
       name: production
-      url: http://${{ secrets.EC2_HOST }}
 
     steps:
       - name: Deploy on EC2 via SSH

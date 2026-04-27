@@ -210,6 +210,7 @@ jobs:
           tags: |
             ${{ env.DOCKER_FRONTEND }}:${{ env.IMAGE_TAG }}
             ${{ env.DOCKER_FRONTEND }}:latest
+          no-cache: true
           cache-from: type=gha
           cache-to:   type=gha,mode=max
 

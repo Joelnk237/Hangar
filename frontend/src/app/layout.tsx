@@ -9,15 +9,17 @@ import Footer from "./components/layout/footer";
 import ScrollToTop from "./components/scroll-to-top";
 import Header from "./components/layout/header";
 import { Toaster } from "react-hot-toast";
+//import { getServerSession } from "next-auth";
 //import SessionProviderComp from "./provider/SessionProviderComp";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
-  session,
+  //session,
 }: Readonly<{
   children: React.ReactNode;
-  session:any
+  //session:any
 }>) {
+  //const session = await getServerSession();
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${dmsans.className}`}>

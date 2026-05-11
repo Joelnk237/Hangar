@@ -17,4 +17,9 @@ export interface StellplatzFilters {
     flugzeuggroesse: any;
     key?: any;
   }
+
+export type PageProps = {
+  //params: { slug: string };
+  params: Promise<{ slug: string }>;
+};
   

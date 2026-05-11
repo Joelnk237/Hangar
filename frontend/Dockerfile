@@ -5,6 +5,8 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
+RUN ls -la
+RUN cat package-lock.json | head -n 50
 RUN npm ci
 
 # ─────────────────────────────────────────────

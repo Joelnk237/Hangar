@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest --coverage --watchAll=false --reporters=default --reporters=jest-junit"
+  },
+  "jest-junit": {
+    "outputDirectory": "test-results",
+    "outputName": "junit.xml"
   },
   "dependencies": {
     "@iconify/icons-ion": "^1.2.10",
